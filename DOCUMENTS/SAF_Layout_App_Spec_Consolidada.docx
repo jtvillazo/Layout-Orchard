@@ -1,0 +1,214 @@
+# SAF Layout App — Spec Consolidada
+*Documento de referencia técnica, basado en cuestionario original + ronda de aclaraciones*
+
+---
+
+## 1. Problema y objetivo
+
+**Problema actual:** el layout de un trial de kiwi se hace hoy en papel y lápiz, con múltiples pasos manuales (dibujo en grid impreso → notas de tratamiento/color → traspaso a Excel → impresión de labels → reordenar labels a mano). Esto genera errores humanos, falta de estandarización entre personas, y fragilidad física (papel mojado, perdido, desactualizado).
+
+**Objetivo único del MVP:** permitir crear el **layout** de un trial de kiwi, identificando árboles (vines), sus tratamientos y sus características, en una app digital.
+
+**Usuarios:** técnicos y científicos de campo. Conocimiento requerido: básico, deben poder operar sin capacitación extensa.
+
+---
+
+## 2. Terminología final (reemplaza ambigüedades del documento original)
+
+| Término | Definición final |
+|---|---|
+| **Orchard** | El campo completo de kiwi. Tiene nombre y dirección. Es solo *información de referencia*, no se dibuja en el layout. |
+| **Block** | Zona delimitada dentro de una Orchard. Tiene nombre. También es solo información de referencia. |
+| **Project** | El estudio científico completo que se aplica sobre las vines (ej: "ensayo de fertilizante X, temporada 2025"). Es el concepto de más alto nivel. |
+| **Layout** | El diseño/plano descriptivo de **dónde** se está aplicando un Project. Es lo que la app dibuja y edita. Reemplaza cualquier uso anterior de "Project" como sinónimo de plano. |
+| **Grid** | El dibujo de rows + travesaños dentro de un Layout. Define los Bays. Un Layout puede contener **más de un Grid** (ej: si el Project se aplica en más de un Block). |
+| **Row** | Línea de vines. Tiene un número, ubicado siempre en el extremo inferior (ver sección 8). |
+| **Bay** | El cuadrado que se forma entre 2 rows de vines y 2 travesaños perpendiculares. Es la unidad mínima de zoom/trabajo cómodo. |
+| **Vine** | Un árbol de kiwi (male o female). Solo se muestran en el layout las vines que participan del Project (tratadas, control, o referencia) — **no se dibujan árboles que no son parte del estudio.** |
+| **Treatment** | Técnica o químico aplicado a una vine. Tiene Nombre, Label Name, Color, Comment. |
+| **Objeto** | Elemento no-vine en el mapa (sensor, cámara, toma de agua, baño, entrada, etc.). Puede tener ícono predefinido o ser una figura geométrica personalizable (color + texto). No existe distinción funcional entre "objeto" y "objeto de orientación" — es una sola entidad con distintos íconos. |
+| **Texto** | Elemento de texto libre en el mapa (comentarios, nombres, referencias). |
+
+**Relación jerárquica:**
+```
+Orchard (info) 
+  └─ Block (info)
+       └─ Project (estudio científico)
+            └─ Layout (1 por Project — nunca se comparten entre proyectos)
+                 └─ Grid(s) (1 o más por Layout)
+                      └─ Bay(s)
+                           └─ Vine(s) / Row number
+                 └─ Objetos (independientes del grid, en su propio layer)
+                 └─ Textos
+```
+
+**Regla clave:** cada Layout es completamente independiente. No hay versionado ni relación entre layouts, ni siquiera si son idénticos o del mismo Block en distinta temporada. Un Project nuevo = un Layout nuevo, sin excepción.
+
+---
+
+## 3. Flujo de la app (Home → Edición)
+
+**Home** tiene 2 opciones:
+1. **"Layouts"** → lista de layouts ya creados. Al abrir uno, entra en modo **READ ONLY**, con un botón visible para pasar a **EDIT**.
+2. **"New Layout"** ("Fresh Layout") → entra directo a modo EDIT.
+
+**Al crear un nuevo Layout**, primero se pide la información base:
+- Nombre del proyecto (Project)
+- Orchard (este dato se replica automáticamente a todos los objetos del layout que necesiten referencia a Orchard)
+- Al crear cada Grid dentro del layout: tamaño (rows y bays), Block asociado, y demás info del grid.
+
+**En modo EDIT:**
+- Canvas infinito, navegable en X/Y, rotable en Z, con zoom in/out.
+- Dos botones circulares flotantes:
+  - **Izquierda — TOOLS:** crear grid, crear objetos, crear objetos de orientación, modo selección, modo numeración.
+  - **Derecha — TREATMENTS:** crear/editar treatments, ver cantidad de vines por treatment.
+- Al finalizar: menú de 3 puntos → Guardar / Exportar como Imagen / Descargar Excel (Excel queda fuera del alcance de esta primera etapa de desarrollo — ver sección 11).
+
+---
+
+## 4. Grid, Bay y Vines — reglas físicas
+
+- El Grid es esquemático, **sin unidades de medida reales** (no metros, no distancias físicas). La unidad mínima es el Bay.
+- Grid se puede editar después de creado (agrandar/achicar) sin perder vines ya puestas. A futuro: soporte para grids no rectangulares (ej. diagonales, con bays desiguales por lado).
+- Un Bay se forma entre 2 rows y 2 travesaños. Normalmente tiene 2 vines (una por lado de row), pero puede tener 0, 1, 2 o **hasta 3** vines.
+- **Creación de grid:** al crear, se pide tamaño (rows y bays) con un **checkbox opcional**:
+  - ✅ Marcado → se agregan automáticamente 2 vines por bay por row en todo el grid (para quienes prefieren ver todo y luego borrar lo que no usan).
+  - ⬜ Sin marcar → grid vacío, las vines se agregan manualmente una por una con long-press (para quienes prefieren agregar solo lo que necesitan).
+- **Agregar una vine:** long-press (1.5s) sobre la línea del grid (donde van los árboles) → popup pidiendo Male/Female y Treatment opcional (si no se asigna, la vine queda como "no tratada", que es el estado por defecto).
+- **3er árbol en un bay:** el usuario puede elegir su posición relativa — **al comienzo, al medio, o al final** de la línea del bay.
+- **Editar/eliminar una vine ya creada:** un solo click (corto) abre el popup de Editar/Eliminar — el long-press queda reservado exclusivamente para *crear* una vine nueva sobre una línea vacía.
+- No se dibujan vines que no forman parte del Project (no tienen relevancia en el layout).
+
+---
+
+## 5. Numeración de Rows
+
+- El número de Row siempre se ubica en el **extremo inferior** del row (el grid se lee de abajo hacia arriba).
+- Ese número se asigna **tocando el extremo de la row** (no autogenerado por posición del grid).
+
+---
+
+## 6. Numeración de Vines — flujo en 2 etapas (punto clave, antes contradictorio)
+
+Este es un proceso separado y posterior a la creación de vines:
+
+**Etapa 1 — Identificación (durante la creación del layout):**
+Al crear una vine se define: Género (male/female), Treatment (opcional), Comment. **No se asigna número en este momento.**
+
+**Etapa 2 — Numeración (modo aparte, una vez identificadas todas las vines del proyecto):**
+Se entra a un modo especial desde TOOLS → "Modo Numeración". Ahí:
+- Existe una opción de numeración automática por defecto: asigna número a todas las vines **agrupadas por treatment**, en orden de recorrido tipo **culebra (snake)** a través de los rows.
+- El usuario puede sobreescribir ese orden manualmente:
+  - Tap simple sobre una vine → suma +1 al contador.
+  - Mantener presionado → resetea el contador a 0.
+- **Validación visual en tiempo real:** el número se muestra en **verde** si es único dentro de su treatment, y en **rojo** si está duplicado dentro de su treatment.
+- La numeración es única **por treatment**, no por row ni por todo el layout (ej: puede existir Vine #3 en Treatment A y Vine #3 en Treatment B, sin conflicto).
+
+---
+
+## 7. Treatments
+
+- Campos: Name, Label Name, Color, Comment.
+- El menú de Treatments muestra cuántas vines tienen asignado cada uno.
+- **Editar un Treatment** (nombre, color, etc.) actualiza automáticamente todas las vines que lo tienen asignado — no hay copia, es una referencia viva.
+- **Eliminar un Treatment** con vines asignadas: se permite. Esas vines pasan automáticamente a estado "no tratada" (el estado por defecto de toda vine nueva).
+
+---
+
+## 8. Objetos y Textos
+
+- **Objetos:** representan elementos físicos no-vine (sensores, cámaras, tomas de agua, baños, entradas, etc.). Cada tipo común tiene ícono predefinido. Además existe la opción de crear una figura geométrica genérica (cuadrado, rectángulo o círculo), con color y texto personalizables, para casos no cubiertos por los íconos predefinidos.
+- Los objetos se pueden **mover, rotar y escalar** libremente.
+- **Textos:** elemento de texto libre, sin ícono, para comentarios, nombres de entrada, referencias, números sueltos, etc.
+
+---
+
+## 9. Sistema de Layers (confirmado como parte del MVP)
+
+Se decidió incluirlo desde el día 1 porque afecta el modelo de datos.
+
+- **Layer 1 (base, fija):** el Grid siempre está en la capa más baja.
+- **Layer 2 (por defecto):** vines, objetos y textos se crean acá por defecto, sobre el grid.
+- **Layers adicionales:** debe existir la posibilidad de mover un objeto/vine/texto a una capa superior (layer 3, 4...) cuando el usuario lo necesite, para resolver superposiciones.
+- Cada elemento individual debe poder elegir su layer.
+
+---
+
+## 10. Selección y edición
+
+- **Selección simple (click corto):** sobre un elemento ya creado, abre el popup de Editar/Eliminar.
+- **Selección múltiple:** se activa con el botón "Select" en TOOLS, y se seleccionan elementos tocándolos uno por uno (no hay lazo/rectángulo de selección todavía — queda para después).
+- **Alcance de la selección múltiple en el MVP:** solo permite **eliminar** en lote. El cambio de treatment en lote **no está en el MVP** — por ahora el cambio de treatment se hace vine por vine, manualmente. (Queda abierta como feature futura la posibilidad de cambiar treatment a varias vines seleccionadas a la vez.)
+- Todos los elementos del plano pueden superponerse y moverse libremente, respetando la regla de layers para definir qué queda arriba/abajo visualmente.
+- **Undo/Redo:** no es parte del MVP, pero debe existir en una iteración posterior.
+
+---
+
+## 11. Identidad / Login
+
+- Se descarta "sin login" del cuestionario original.
+- Se implementa un **login super simple**: solo un campo de **usuario (nombre)**, sin contraseña ni cuenta real — únicamente para trazabilidad de quién hizo o editó cada layout.
+
+---
+
+## 12. Guardado
+
+- El usuario puede guardar manualmente cuando quiera.
+- Además debe existir **algún mecanismo de guardado automático/de emergencia** para evitar pérdida de avance por fallas técnicas (autosave en background, aunque el guardado "oficial" sea manual).
+- No hay historial de versiones — no es necesario dado que no hay edición concurrente esperada (un solo editor por layout en la práctica).
+
+---
+
+## 13. Export (Excel / Imagen)
+
+- Exportar como **Imagen** y **descargar Excel** están contemplados como opciones del menú de 3 puntos al finalizar un layout.
+- **Decisión explícita:** el diseño detallado del Excel (columnas, orden de filas, separación de labels árbol vs. caña, formato QR) queda **fuera del alcance de esta etapa** de desarrollo. Se abordará en un capítulo/spec separado más adelante. Por ahora el foco de desarrollo es exclusivamente la app de layout.
+
+---
+
+## 14. Resumen MVP vs. Futuro
+
+### Incluido en el MVP
+- Home con "Layouts" (lista) y "New Layout"
+- Modo READ ONLY vs EDIT
+- Creación de Layout con Project name + Orchard
+- Creación de Grid(s) dentro de un Layout, con checkbox de auto-poblado de vines
+- Creación manual de vines (long-press), con Male/Female + Treatment opcional + Comment
+- Creación y edición de Treatments (con actualización en cascada y borrado seguro)
+- Creación de Objetos (predefinidos + genéricos) y Textos
+- Sistema de Layers (mínimo: grid=1, contenido=2, + capacidad de subir de capa)
+- Numeración de Rows (tap en extremo)
+- Modo Numeración de Vines (automático tipo snake por treatment + edición manual con validación verde/rojo)
+- Selección múltiple solo para eliminar
+- Mover/rotar/escalar objetos
+- Login simple (usuario, sin password)
+- Guardado manual + mecanismo de guardado de emergencia
+- Canvas infinito con pan/zoom/rotación Z
+
+### Explícitamente fuera del MVP (futuro)
+- Excel export (spec separada, pendiente)
+- Cambio de treatment en selección múltiple (solo delete por ahora)
+- Undo/Redo
+- Selección por lazo/rectángulo
+- Grids no rectangulares (diagonales, formas irregulares) — mencionado como necesidad futura
+- Versionado de layouts / historial
+- Login robusto con contraseña
+- GPS, mapas, IA, integraciones, reportes (descartado explícitamente en cuestionario original)
+
+---
+
+## 15. Decisiones finales de cierre
+
+**Orchard y Block como entidades reutilizables:**
+Orchard y Block dejan de ser texto libre tipeado en cada Layout — pasan a ser **entidades propias con datos** (catálogo), pensadas para ser reutilizadas entre distintos Layouts/Projects y para alimentar futuros exports (Excel, reportes). Esto implica que en el modelo de datos existen tablas/objetos `Orchard` y `Block` independientes, y cada Layout/Grid referencia a un Orchard y Block existentes (o los crea si no existen aún), en vez de guardar el nombre como string suelto.
+
+**Numeración snake con múltiples Grids en un mismo Layout:**
+Cuando un Project/Layout tiene más de un Grid, la numeración automática no se reinicia por grid. Se numera en modo snake el **primer Grid** de punta a punta, y el **segundo Grid continúa la secuencia** donde quedó el primero (no vuelve a 1). Esto aplica por Treatment, igual que la regla general de la sección 6 — es decir, la continuidad de numeración es: mismo Treatment → sigue el conteo entre grids; el orden de "cuál grid es el primero" lo define el usuario o el orden de creación de los grids dentro del Layout (a definir en implementación).
+
+---
+
+## 16. Preguntas que siguen abiertas (no bloquean el MVP, pero conviene definir antes de esa etapa)
+
+- Columnas exactas y formato del Excel de export.
+- Qué campos exactos debe tener Orchard (nombre, dirección — ¿algo más útil para un futuro reporte, como región o dueño de campo?) y Block (nombre — ¿algo más?).
+- Cómo se define "cuál grid es el primero" a efectos de numeración snake cuando hay más de uno en el mismo Layout (¿orden de creación, o el usuario lo elige manualmente?).
