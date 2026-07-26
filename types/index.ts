@@ -103,8 +103,8 @@ interface Vine extends LayoutElement {
   gridId: UUID;
   rowNumber: number;
   bayIndex: number;
-  slot: 1 | 2 | 3;
-  slotPosition?: "start" | "middle" | "end";
+  slot: 1 | 2 | 3; // posición final, usada por la geometría para dibujar
+  slotPosition?: "start" | "middle" | "end"; // solo si se creó como 3ra vine; registra la intención original del usuario, no se recalcula después
   gender: "male" | "female";
   treatmentId: UUID | null;
   number: number | null;
