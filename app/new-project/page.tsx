@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createProjectData } from "@/lib/project-store";
 import { Block, Layout, Orchard, Project, UUID } from "@/types";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 
 function createId(): UUID {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -20,6 +20,7 @@ export default function NewProjectPage() {
   const [orchardAddress, setOrchardAddress] = useState("");
 
   const [blocks, setBlocks] = useState([""]);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function addBlock() {
     setBlocks((current) => [...current, ""]);
@@ -39,13 +40,11 @@ export default function NewProjectPage() {
     );
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-  
+  function createProject() {
     const orchardId = createId();
-const projectId = createId();
-const layoutId = createId();
-  
+    const projectId = createId();
+    const layoutId = createId();
+
     const blockObjects: Block[] = blocks
       .filter((block) => block.trim() !== "")
       .map((block) => ({
@@ -53,32 +52,32 @@ const layoutId = createId();
         orchardId,
         name: block.trim(),
       }));
-  
+
     const orchard: Orchard = {
       id: orchardId,
       name: orchardName.trim(),
       address: orchardAddress.trim() || undefined,
     };
-  
+
     const project: Project = {
       id: projectId,
       name: projectName.trim(),
       variety: variety.trim(),
       projectLeader: projectLeader.trim(),
       createdAt: new Date().toISOString(),
-      createdBy: "current-user",
+      createdBy: currentUser,
     };
-  
+
     const layout: Layout = {
       id: layoutId,
       projectId,
       orchardId,
       blockIds: blockObjects.map((block) => block.id),
       status: "draft",
-      lastEditedBy: "current-user",
+      lastEditedBy: currentUser,
       lastEditedAt: new Date().toISOString(),
     };
-  
+
     createProjectData({
       project,
       orchard,
@@ -88,15 +87,26 @@ const layoutId = createId();
       treatments: [],
       vines: [],
     });
-  
-    console.log("Created project:", {
-      project,
-      orchard,
-      blocks: blockObjects,
-      layout,
-    });
-  
+
     router.push(`/test-grid?layoutId=${layoutId}`);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!event.currentTarget.reportValidity()) {
+      return;
+    }
+
+    createProject();
+  }
+
+  function handleCreateClick() {
+    if (!formRef.current?.reportValidity()) {
+      return;
+    }
+
+    createProject();
   }
 
   return (
@@ -121,7 +131,7 @@ const layoutId = createId();
           </div>
         </header>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
           {/* Project */}
           <section>
             <SectionTitle>Project</SectionTitle>
@@ -220,7 +230,8 @@ const layoutId = createId();
 
           {/* Submit */}
           <button
-            type="submit"
+            type="button"
+            onClick={handleCreateClick}
             className="w-full rounded-xl bg-[#2f4034] px-5 py-4 text-sm font-medium text-white transition hover:bg-[#243329]"
           >
             Create Project
