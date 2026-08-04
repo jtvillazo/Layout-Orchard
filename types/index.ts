@@ -20,10 +20,8 @@ interface Block {
 interface Project {
   id: UUID;
   name: string;
-  blockIds: UUID[];
   variety: string;
   projectLeader: string;
-  orchardId: UUID; // se replica a todo el layout (sección 3)
   createdAt: string;
   createdBy: string; // username simple, sección 11
 }
@@ -37,6 +35,8 @@ interface Layout {
   status: "draft" | "saved"; // para el autosave de emergencia (sección 12)
   lastEditedBy: string;
   lastEditedAt: string;
+  orchardId: UUID; // se replica a todo el layout (sección 3)
+  blockIds: UUID[];
 }
 
 interface GridCell {

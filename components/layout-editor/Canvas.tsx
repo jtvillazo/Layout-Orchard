@@ -29,10 +29,18 @@ const NO_SELECT_STYLE: React.CSSProperties = {
 
 export function Canvas({
   children,
-  initialViewBox = { x: -100, y: -300, width: 500, height: 400 },
+  initialViewBox = { x: -450, y: -1000, width: 1500, height: 1850 },
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
   const [rotation, setRotation] = useState(0);
+  // Pivote de rotación fijo en el mundo: se calcula una sola vez a partir del
+  // viewBox inicial y NUNCA se recalcula durante el pan. Si el pivote siguiera
+  // al viewBox (como antes), pan + rotación quedan acoplados y un drag en
+  // pantalla termina desplazando el contenido en una dirección rotada.
+  const [pivot, setPivot] = useState({
+    x: initialViewBox.x + initialViewBox.width / 2,
+    y: initialViewBox.y + initialViewBox.height / 2,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -166,8 +174,13 @@ export function Canvas({
   };
 
   const handleReset = useCallback(() => {
-    setViewBox(initialViewBoxRef.current);
+    const initial = initialViewBoxRef.current;
+    setViewBox(initial);
     setRotation(0);
+    setPivot({
+      x: initial.x + initial.width / 2,
+      y: initial.y + initial.height / 2,
+    });
   }, []);
 
   const initPinchFromTouches = (touches: TouchList) => {
@@ -431,9 +444,6 @@ export function Canvas({
     [applyZoom, applyRotationDelta]
   );
 
-  const pivotX = viewBox.x + viewBox.width / 2;
-  const pivotY = viewBox.y + viewBox.height / 2;
-
   const isDefaultView =
     rotation === 0 &&
     viewBox.x === initialViewBoxRef.current.x &&
@@ -462,7 +472,7 @@ export function Canvas({
         height="100%"
         style={{ display: "block", pointerEvents: "none", ...NO_SELECT_STYLE }}
       >
-        <g transform={`rotate(${rotation} ${pivotX} ${pivotY})`}>
+        <g transform={`rotate(${rotation} ${pivot.x} ${pivot.y})`}>
           <DotBackground />
           {children}
         </g>

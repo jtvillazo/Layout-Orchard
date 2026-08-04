@@ -31,24 +31,21 @@ export const mockBlock: Block = {
 export const mockProject: Project = {
   id: "project-1",
   name: "Ensayo Fertilizante X — Temporada 2026",
-  blockIds: ["block-1"],
   variety: "Hayward",
   projectLeader: "Ana Rodríguez",
-  orchardId: "orchard-1",
   createdAt: "2026-06-01T09:00:00Z",
   createdBy: "ana.rodriguez",
 };
 
-// ─── Layout ───
-
 export const mockLayout: Layout = {
   id: "layout-1",
   projectId: "project-1",
+  orchardId: "orchard-1",
+  blockIds: ["block-1"],
   status: "saved",
   lastEditedBy: "ana.rodriguez",
   lastEditedAt: "2026-07-20T14:30:00Z",
 };
-
 // ─── Grids ───
 // Grid 1 y Grid 2 en el mismo Layout (mismo Block, dos zonas del ensayo)
 // El order define cuál se numera primero (sección 15)
