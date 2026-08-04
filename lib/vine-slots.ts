@@ -1,5 +1,19 @@
 import type { Vine } from "@/types";
 
+const ALL_SLOTS = [1, 2, 3] as const;
+
+/**
+ * Devuelve el primer slot libre (1, 2 o 3) en un bay, o null si los tres
+ * están ocupados. No asume que los slots existentes sean consecutivos.
+ */
+export function getFirstAvailableSlot(existingVinesInBay: Vine[]): 1 | 2 | 3 | null {
+  const usedSlots = new Set(existingVinesInBay.map((vine) => vine.slot));
+  for (const slot of ALL_SLOTS) {
+    if (!usedSlots.has(slot)) return slot;
+  }
+  return null;
+}
+
 /**
  * Determina cómo deben reacomodarse los slots de las vines YA EXISTENTES
  * en un bay, cuando se agrega una vine nueva en una posición relativa

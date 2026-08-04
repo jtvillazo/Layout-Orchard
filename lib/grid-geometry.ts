@@ -4,7 +4,7 @@ import type { Grid, Vine } from "@/types";
 // Todo esquemático, sin unidades reales (sección 4)
 
 export const ROW_SPACING = 80; // distancia horizontal entre rows (eje X)
-export const BAY_HEIGHT = 60; // altura de cada tramo de bay (eje Y)
+export const BAY_HEIGHT = 80; // altura de cada tramo de bay (eje Y)
 
 export interface PixelPoint {
   x: number;
@@ -23,11 +23,10 @@ export interface PixelPoint {
  */
 function getFractionForSlot(slot: 1 | 2 | 3, totalVinesInBay: number): number {
   if (totalVinesInBay <= 1) return 0.5;
-  if (totalVinesInBay === 2) return slot === 1 ? 0.15 : 0.85;
-  // 3 vines: repartidas en tercios
-  if (slot === 1) return 0.15;
+  if (totalVinesInBay === 2) return slot === 1 ? 0.2 : 0.8;
+  if (slot === 1) return 0.2;
   if (slot === 2) return 0.5;
-  return 0.85; // slot 3
+  return 0.8; // slot 3
 }
 
 /**
@@ -80,7 +79,10 @@ export function pixelToBay(
   const relativeY = grid.position.y - point.y; // invertido por el eje Y de SVG
 
   const rowNumber = Math.round(relativeX / ROW_SPACING) + 1;
-  const bayIndex = Math.round(relativeY / BAY_HEIGHT) + 1;
+  // Cada bay ocupa [k*BAY_HEIGHT, (k+1)*BAY_HEIGHT) en relativeY (k = 0, 1, …).
+  // Bay 1 = [0, 60), Bay 2 = [60, 120), etc. La frontera superior de un bay
+  // pertenece al bay siguiente (p. ej. relativeY = 60 → Bay 2).
+  const bayIndex = Math.floor(relativeY / BAY_HEIGHT) + 1;
 
   if (rowNumber < 1 || rowNumber > grid.rows) return null;
   if (bayIndex < 1 || bayIndex > grid.bayColumns) return null;

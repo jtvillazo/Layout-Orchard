@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import type { PixelPoint } from "@/lib/grid-geometry";
+import { screenClientToContentPoint } from "@/lib/viewport";
 import { DotBackground } from "./DotBackground";
 
 interface ViewBox {
@@ -13,10 +15,12 @@ interface ViewBox {
 const MIN_ZOOM_WIDTH = 150;
 const MAX_ZOOM_WIDTH = 4000;
 const DRAG_THRESHOLD = 6;
+const LONG_PRESS_DURATION = 600;
 
 interface CanvasProps {
   children: React.ReactNode;
   initialViewBox?: ViewBox;
+  onLongPress?: (clientX: number, clientY: number, point: PixelPoint | null) => void;
 }
 
 type ScreenPoint = { x: number; y: number };
@@ -30,6 +34,7 @@ const NO_SELECT_STYLE: React.CSSProperties = {
 export function Canvas({
   children,
   initialViewBox = { x: -450, y: -1000, width: 1500, height: 1850 },
+  onLongPress,
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
   const [rotation, setRotation] = useState(0);
@@ -43,6 +48,7 @@ export function Canvas({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const contentGroupRef = useRef<SVGGElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const initialViewBoxRef = useRef(initialViewBox);
@@ -53,6 +59,11 @@ export function Canvas({
   const rotateWithPointer = useRef(false);
   const gestureMoved = useRef(false);
   const touchGestureActive = useRef(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+  const longPressStartPosition = useRef<ScreenPoint | null>(null);
+  const onLongPressRef = useRef(onLongPress);
+  onLongPressRef.current = onLongPress;
 
   const viewBoxRef = useRef(viewBox);
   viewBoxRef.current = viewBox;
@@ -207,6 +218,46 @@ export function Canvas({
     }
   };
 
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const cancelLongPress = (reason?: string, silent = false) => {
+    if (
+      !silent &&
+      (longPressTimer.current !== null || longPressStartPosition.current !== null)
+    ) {
+      console.log("[LONG PRESS] cancelled", reason ?? "");
+    }
+    clearLongPressTimer();
+    longPressStartPosition.current = null;
+  };
+
+  const startLongPressTimer = (touch: Touch) => {
+    clearLongPressTimer();
+    const startPos = { x: touch.clientX, y: touch.clientY };
+    longPressStartPosition.current = startPos;
+    console.log("[LONG PRESS] timer started");
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      console.log("[LONG PRESS] TRIGGERED");
+      const activeTouch = activeTouches.current.values().next().value;
+      const clientX = activeTouch?.x ?? startPos.x;
+      const clientY = activeTouch?.y ?? startPos.y;
+      const svg = svgRef.current;
+      const contentGroup = contentGroupRef.current;
+      const point =
+        svg && contentGroup
+          ? screenClientToContentPoint(svg, contentGroup, clientX, clientY)
+          : null;
+      onLongPressRef.current?.(clientX, clientY, point);
+      longPressTriggered.current = true;
+    }, LONG_PRESS_DURATION);
+  };
+
   // ─── Touch nativo + bloqueo de scroll iOS ───
 
   useEffect(() => {
@@ -258,6 +309,13 @@ export function Canvas({
       e.stopPropagation();
       touchGestureActive.current = true;
       gestureMoved.current = false;
+      longPressTriggered.current = false;
+
+      console.log("[LONG PRESS] touch start", {
+        touches: e.touches.length,
+        target: e.target instanceof Element ? e.target.tagName : e.target,
+        hasOnLongPress: typeof onLongPressRef.current === "function",
+      });
 
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
@@ -267,7 +325,12 @@ export function Canvas({
         });
       }
 
-      if (e.touches.length === 2) initPinchFromTouches(e.touches);
+      if (e.touches.length >= 2) {
+        cancelLongPress("second finger");
+        if (e.touches.length === 2) initPinchFromTouches(e.touches);
+      } else if (e.touches.length === 1) {
+        startLongPressTimer(e.touches[0]);
+      }
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -279,6 +342,7 @@ export function Canvas({
       const { touches } = e;
 
       if (touches.length === 2) {
+        cancelLongPress("second finger during move");
         const p0 = { x: touches[0].clientX, y: touches[0].clientY };
         const p1 = { x: touches[1].clientX, y: touches[1].clientY };
         gestureMoved.current = true;
@@ -293,6 +357,16 @@ export function Canvas({
 
       if (touches.length === 1) {
         const touch = touches[0];
+        const longPressStart = longPressStartPosition.current;
+        if (longPressStart) {
+          const movedFromStart = Math.hypot(
+            touch.clientX - longPressStart.x,
+            touch.clientY - longPressStart.y
+          );
+          if (movedFromStart > DRAG_THRESHOLD) {
+            cancelLongPress(`moved ${movedFromStart.toFixed(1)}px`);
+          }
+        }
         const previous = activeTouches.current.get(touch.identifier);
         if (previous) {
           const dx = touch.clientX - previous.x;
@@ -327,11 +401,14 @@ export function Canvas({
         else clearPinch();
       }
 
-      if (wasTap) {
+      cancelLongPress("touch end", longPressTriggered.current);
+
+      if (wasTap && !longPressTriggered.current) {
         const touch = e.changedTouches[0];
         gestureApi.current.forwardClick(touch.clientX, touch.clientY);
       }
 
+      longPressTriggered.current = false;
       gestureMoved.current = false;
     };
 
@@ -341,6 +418,7 @@ export function Canvas({
     container.addEventListener("touchcancel", onTouchEnd, { passive: false, capture: true });
 
     return () => {
+      cancelLongPress(undefined, true);
       document.removeEventListener("touchstart", preventBrowserGesture, { capture: true });
       document.removeEventListener("touchmove", preventBrowserGesture, { capture: true });
       container.removeEventListener("touchstart", onTouchStart, { capture: true });
@@ -472,7 +550,7 @@ export function Canvas({
         height="100%"
         style={{ display: "block", pointerEvents: "none", ...NO_SELECT_STYLE }}
       >
-        <g transform={`rotate(${rotation} ${pivot.x} ${pivot.y})`}>
+        <g ref={contentGroupRef} transform={`rotate(${rotation} ${pivot.x} ${pivot.y})`}>
           <DotBackground />
           {children}
         </g>

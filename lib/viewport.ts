@@ -93,3 +93,24 @@ export function screenToStagePoint(screenPoint: ScreenPoint, stageRect: DOMRect)
     y: screenPoint.y - stageRect.top,
   };
 }
+
+/**
+ * Maps a screen/client point to SVG content coordinates (inside the rotated
+ * content group), inverting the current viewBox + transform stack.
+ */
+export function screenClientToContentPoint(
+  svg: SVGSVGElement,
+  contentGroup: SVGGElement,
+  clientX: number,
+  clientY: number
+): ScreenPoint | null {
+  const inverse = contentGroup.getScreenCTM()?.inverse();
+  if (!inverse) return null;
+
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const local = pt.matrixTransform(inverse);
+
+  return { x: local.x, y: local.y };
+}

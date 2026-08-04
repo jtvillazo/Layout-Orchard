@@ -1,7 +1,7 @@
 "use client";
 
 import type { Grid, Vine, Treatment } from "@/types";
-import { bayToPixel, getRowLineEndpoints, getRowLabelPosition } from "@/lib/grid-geometry";
+import { bayToPixel, BAY_HEIGHT, getRowLineEndpoints, getRowLabelPosition, ROW_SPACING } from "@/lib/grid-geometry";
 
 interface GridViewProps {
   grid: Grid;
@@ -13,6 +13,7 @@ interface GridViewProps {
 
 const UNTREATED_COLOR = "#D1D5DB"; // gris, para vines sin treatment (sección 4: estado default)
 const VINE_RADIUS = 8;
+const LINE_OVERHANG = BAY_HEIGHT * 0.1;
 
 export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: GridViewProps) {
   const treatmentById = new Map(treatments.map((t) => [t.id, t]));
@@ -27,6 +28,12 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
   });
 
   const rowNumbers = Array.from({ length: grid.rows }, (_, i) => i + 1);
+  const gridLeftX = grid.position.x;
+  const gridRightX = grid.position.x + (grid.rows - 1) * ROW_SPACING;
+  const baySeparatorYs = Array.from(
+    { length: grid.bayColumns + 1 },
+    (_, index) => grid.position.y - index * BAY_HEIGHT
+  );
 
   return (
     <g style={{ userSelect: "none", WebkitUserSelect: "none" }}>
@@ -40,9 +47,9 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
           <g key={`row-${rowNumber}`}>
             <line
               x1={bottom.x}
-              y1={bottom.y}
+              y1={bottom.y + LINE_OVERHANG}
               x2={top.x}
-              y2={top.y}
+              y2={top.y - LINE_OVERHANG}
               stroke="#374151"
               strokeWidth={3}
             />
@@ -97,6 +104,21 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
           />
         );
       })}
+
+      {/* Separadores transversales entre bays (por encima de las vines) */}
+      {baySeparatorYs.map((y, index) => (
+        <line
+          key={`bay-separator-${index}`}
+          x1={gridLeftX - LINE_OVERHANG}
+          y1={y}
+          x2={gridRightX + LINE_OVERHANG}
+          y2={y}
+          stroke="#374151"
+          strokeWidth={1}
+          opacity={0.35}
+          pointerEvents="none"
+        />
+      ))}
     </g>
   );
 }

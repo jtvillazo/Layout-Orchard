@@ -17,6 +17,8 @@ function createId(): UUID {
 
 import { Canvas } from "@/components/layout-editor/Canvas";
 import { GridView } from "@/components/layout-editor/GridView";
+import { pixelToBay } from "@/lib/grid-geometry";
+import { getFirstAvailableSlot } from "@/lib/vine-slots";
 
 export default function TestGridPage() {
   const searchParams = useSearchParams();
@@ -101,26 +103,39 @@ export default function TestGridPage() {
     setShowCreateGrid(false);
   }
 
-  /*
-   * Primera función de prueba para crear una Vine.
-   *
-   * Todavía no está conectada al click del Grid.
-   * La conectaremos en GridView en el siguiente paso.
-   */
-  function handleCreateVine(grid: Grid) {
-    const newVine: Vine = {
-      id: createId(),
-      gridId: grid.id,
-      rowNumber: 1,
-      bayIndex: 1,
-      slot: 1,
-      gender: "female",
-      treatmentId: null,
-      number: null,
-      layer: 2,
-    };
+  function handleCreateVineAtBay(grid: Grid, rowNumber: number, bayIndex: number) {
+    setVines((current) => {
+      const vinesInBay = current.filter(
+        (vine) =>
+          vine.gridId === grid.id &&
+          vine.rowNumber === rowNumber &&
+          vine.bayIndex === bayIndex
+      );
 
-    setVines((current) => [...current, newVine]);
+      const slot = getFirstAvailableSlot(vinesInBay);
+      if (slot === null) {
+        console.log("[LONG PRESS] Bay lleno", {
+          gridId: grid.id,
+          rowNumber,
+          bayIndex,
+        });
+        return current;
+      }
+
+      const newVine: Vine = {
+        id: createId(),
+        gridId: grid.id,
+        rowNumber,
+        bayIndex,
+        slot,
+        gender: "female",
+        treatmentId: null,
+        number: null,
+        layer: 2,
+      };
+
+      return [...current, newVine];
+    });
   }
 
   const grids = projectData?.grids ?? [];
@@ -155,7 +170,7 @@ export default function TestGridPage() {
         {grids.length > 0 && (
           <button
             type="button"
-            onClick={() => handleCreateVine(grids[0])}
+            onClick={() => handleCreateVineAtBay(grids[0], 1, 1)}
             className="mt-2 block rounded-lg bg-[#66806b] px-4 py-2 text-sm font-medium text-white"
           >
             + Test Vine
@@ -171,7 +186,21 @@ export default function TestGridPage() {
       </div>
 
       {/* Canvas */}
-      <Canvas>
+      <Canvas
+        onLongPress={(_clientX, _clientY, point) => {
+          if (!point || grids.length === 0) {
+            return;
+          }
+
+          for (const grid of grids) {
+            const hit = pixelToBay(grid, point);
+            if (hit) {
+              handleCreateVineAtBay(grid, hit.rowNumber, hit.bayIndex);
+              return;
+            }
+          }
+        }}
+      >
         {grids.length > 0 ? (
           grids.map((grid) => (
             <GridView
