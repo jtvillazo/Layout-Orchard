@@ -9,17 +9,25 @@ import {
   ProjectData,
 } from "@/lib/project-store";
 
-import { Grid, UUID, Vine } from "@/types";
+import { Grid, Treatment, UUID, Vine } from "@/types";
 
 function createId(): UUID {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 import { Canvas } from "@/components/layout-editor/Canvas";
+import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
 import { GridView } from "@/components/layout-editor/GridView";
+import { TreatmentModal } from "@/components/layout-editor/TreatmentModal";
+import { TreatmentsMenu } from "@/components/layout-editor/TreatmentsMenu";
 import { VineContextPopup } from "@/components/layout-editor/VineContextPopup";
 import { bayToPixel, computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
+import {
+  countVinesByTreatmentId,
+  countVinesForTreatment,
+  getLayoutTreatments,
+} from "@/lib/treatment-utils";
 
 export default function TestGridPage() {
   const searchParams = useSearchParams();
@@ -35,7 +43,20 @@ export default function TestGridPage() {
 
   // Vines del layout actual
   const [vines, setVines] = useState<Vine[]>([]);
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [selectedVineId, setSelectedVineId] = useState<UUID | null>(null);
+  const [editingVineId, setEditingVineId] = useState<UUID | null>(null);
+  const [selectedTreatmentMenuId, setSelectedTreatmentMenuId] =
+    useState<UUID | null>(null);
+  const [treatmentModalState, setTreatmentModalState] = useState<
+    | { mode: "create" }
+    | { mode: "edit"; treatment: Treatment }
+    | null
+  >(null);
+  const [deleteTreatmentWarning, setDeleteTreatmentWarning] = useState<{
+    treatmentName: string;
+    count: number;
+  } | null>(null);
 
   const rowLabels: Record<number, string> = {};
 
@@ -143,14 +164,66 @@ export default function TestGridPage() {
   }
 
   function handleEditVine(vine: Vine) {
-    // Preparado para useLayoutEditor.openEditVinePopup() — falta el componente UI del editor.
-    console.log("[VINE EDIT] Editor no implementado todavía", {
-      vineId: vine.id,
-      gridId: vine.gridId,
-      rowNumber: vine.rowNumber,
-      bayIndex: vine.bayIndex,
-      slot: vine.slot,
+    setEditingVineId(vine.id);
+    setSelectedVineId(null);
+  }
+
+  function handleSaveVine(vineId: UUID, updates: VineEditableFields) {
+    setVines((current) =>
+      current.map((vine) =>
+        vine.id === vineId
+          ? {
+              ...vine,
+              gender: updates.gender,
+              treatmentId: updates.treatmentId,
+              comment: updates.comment,
+            }
+          : vine
+      )
+    );
+    setEditingVineId(null);
+  }
+
+  function handleAddTreatment(treatment: Treatment) {
+    setTreatments((current) => [...current, treatment]);
+  }
+
+  function handleSaveTreatment(treatment: Treatment) {
+    setTreatments((current) => {
+      const exists = current.some((item) => item.id === treatment.id);
+      if (exists) {
+        return current.map((item) =>
+          item.id === treatment.id ? treatment : item
+        );
+      }
+      return [...current, treatment];
     });
+    setTreatmentModalState(null);
+  }
+
+  function handleDeleteTreatment(treatment: Treatment) {
+    const count = countVinesForTreatment(layoutVines, treatment.id);
+    if (count > 0) {
+      setDeleteTreatmentWarning({
+        treatmentName: treatment.name,
+        count,
+      });
+      setSelectedTreatmentMenuId(null);
+      return;
+    }
+
+    setTreatments((current) =>
+      current.filter((item) => item.id !== treatment.id)
+    );
+    setSelectedTreatmentMenuId(null);
+    setDeleteTreatmentWarning(null);
+  }
+
+  function handleToggleSelectTreatment(treatmentId: UUID) {
+    setSelectedTreatmentMenuId((current) =>
+      current === treatmentId ? null : treatmentId
+    );
+    setDeleteTreatmentWarning(null);
   }
 
   function handleSurfaceClick(target: Element | null) {
@@ -161,6 +234,13 @@ export default function TestGridPage() {
   }
 
   const grids = projectData?.grids ?? [];
+  const layoutTreatments = layoutId
+    ? getLayoutTreatments(treatments, layoutId)
+    : [];
+  const layoutGridIds = new Set(grids.map((grid) => grid.id));
+  const layoutVines = vines.filter((vine) => layoutGridIds.has(vine.gridId));
+  const vineCountByTreatmentId = countVinesByTreatmentId(layoutVines);
+  const editingVine = vines.find((vine) => vine.id === editingVineId) ?? null;
   const selectedVine = vines.find((vine) => vine.id === selectedVineId) ?? null;
   const selectedVineGrid = selectedVine
     ? grids.find((grid) => grid.id === selectedVine.gridId) ?? null
@@ -226,6 +306,28 @@ export default function TestGridPage() {
         )}
       </div>
 
+      {layoutId && (
+        <TreatmentsMenu
+          treatments={layoutTreatments}
+          vineCountByTreatmentId={vineCountByTreatmentId}
+          selectedTreatmentId={selectedTreatmentMenuId}
+          deleteWarning={deleteTreatmentWarning}
+          onToggleSelectTreatment={handleToggleSelectTreatment}
+          onDismissPopup={() => setSelectedTreatmentMenuId(null)}
+          onDismissDeleteWarning={() => setDeleteTreatmentWarning(null)}
+          onEditTreatment={(treatment) => {
+            setSelectedTreatmentMenuId(null);
+            setTreatmentModalState({ mode: "edit", treatment });
+          }}
+          onDeleteTreatment={handleDeleteTreatment}
+          onCreateTreatment={() => {
+            setSelectedTreatmentMenuId(null);
+            setDeleteTreatmentWarning(null);
+            setTreatmentModalState({ mode: "create" });
+          }}
+        />
+      )}
+
       {/* Canvas */}
       <Canvas
         onSurfaceClick={handleSurfaceClick}
@@ -251,7 +353,7 @@ export default function TestGridPage() {
               vines={vines.filter(
                 (vine) => vine.gridId === grid.id
               )}
-              treatments={[]}
+              treatments={treatments}
               rowLabels={rowLabels}
               onVineClick={(vine) => setSelectedVineId(vine.id)}
             />
@@ -298,6 +400,33 @@ export default function TestGridPage() {
           />
         )}
       </Canvas>
+
+      {editingVine && layoutId && (
+        <EditVineModal
+          vine={editingVine}
+          layoutId={layoutId}
+          treatments={layoutTreatments}
+          createId={createId}
+          onCancel={() => setEditingVineId(null)}
+          onSave={(updates) => handleSaveVine(editingVine.id, updates)}
+          onAddTreatment={handleAddTreatment}
+        />
+      )}
+
+      {treatmentModalState && layoutId && (
+        <TreatmentModal
+          layoutId={layoutId}
+          mode={treatmentModalState.mode}
+          treatment={
+            treatmentModalState.mode === "edit"
+              ? treatmentModalState.treatment
+              : undefined
+          }
+          createId={createId}
+          onCancel={() => setTreatmentModalState(null)}
+          onSave={handleSaveTreatment}
+        />
+      )}
 
       {/* Create Grid modal */}
       {showCreateGrid && (

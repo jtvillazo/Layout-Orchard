@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import type { Grid, Vine, Treatment } from "@/types";
 import { bayToPixel, BAY_HEIGHT, getRowLineEndpoints, getRowLabelPosition, ROW_SPACING } from "@/lib/grid-geometry";
 
@@ -87,6 +88,35 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
         const treatment = vine.treatmentId ? treatmentById.get(vine.treatmentId) : null;
         const color = treatment?.color ?? UNTREATED_COLOR;
 
+        const vineStyle = {
+          cursor: onVineClick ? "pointer" : "default",
+          pointerEvents: onVineClick ? "all" : "none",
+        } as const;
+
+        const handleVineClick = (event: MouseEvent) => {
+          event.stopPropagation();
+          onVineClick?.(vine);
+        };
+
+        if (vine.gender === "male") {
+          const size = VINE_RADIUS * 2;
+          return (
+            <rect
+              key={vine.id}
+              data-vine-id={vine.id}
+              x={point.x - VINE_RADIUS}
+              y={point.y - VINE_RADIUS}
+              width={size}
+              height={size}
+              fill={color}
+              stroke="#111827"
+              strokeWidth={1}
+              style={vineStyle}
+              onClick={handleVineClick}
+            />
+          );
+        }
+
         return (
           <circle
             key={vine.id}
@@ -97,14 +127,8 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
             fill={color}
             stroke="#111827"
             strokeWidth={1}
-            style={{
-              cursor: onVineClick ? "pointer" : "default",
-              pointerEvents: onVineClick ? "all" : "none",
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              onVineClick?.(vine);
-            }}
+            style={vineStyle}
+            onClick={handleVineClick}
           />
         );
       })}

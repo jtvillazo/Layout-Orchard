@@ -1,0 +1,578 @@
+# Numbering Mode — Especificación
+
+## Objetivo
+
+Crear un modo especial de edición llamado **Numbering**, accesible desde:
+
+**Tools → Numbering**
+
+Este modo existe exclusivamente para asignar y modificar los números físicos de las Vines una vez que el Layout ya está completamente construido.
+
+La numeración se realiza DESPUÉS de haber creado todas las Vines, asignado sus Treatments y terminado la distribución física.
+
+El campo existente en `Vine` es:
+
+```ts
+number: number | null;
+```
+
+Mientras no se haya utilizado Numbering, las Vines pueden permanecer con:
+
+```ts
+number: null;
+```
+
+---
+
+# 1. Entrada a Numbering Mode
+
+Cuando el usuario entra por primera vez a:
+
+**Tools → Numbering**
+
+se deben asignar automáticamente números a las Vines que todavía tengan:
+
+```ts
+number === null
+```
+
+No se deben numerar Vines que no tengan Treatment:
+
+```ts
+treatmentId === null
+```
+
+Las Vines sin Treatment quedan completamente fuera del sistema de numeración.
+
+---
+
+# 2. Numeración independiente por Treatment
+
+Cada Treatment tiene su propia secuencia de números.
+
+Ejemplo:
+
+```text
+Treatment A
+1
+2
+3
+4
+5
+...
+
+Treatment B
+1
+2
+3
+4
+5
+...
+
+Treatment C
+1
+2
+3
+...
+```
+
+Por lo tanto, el número NO es global para todas las Vines.
+
+El mismo número puede existir simultáneamente en Treatments diferentes sin ser conflicto:
+
+```text
+Treatment A → Vine #1
+Treatment B → Vine #1
+```
+
+Esto es válido.
+
+---
+
+# 3. Orden automático de numeración
+
+La numeración sigue un recorrido físico en forma de **serpiente / zigzag**, porque representa la manera en que el usuario recorre físicamente el orchard.
+
+Las Rows se recorren desde la izquierda hacia la derecha.
+
+### Row 1
+
+Se empieza abajo y se sube:
+
+```text
+      3
+      │
+      2
+      │
+      1
+```
+
+Orden:
+
+```text
+1 → 2 → 3
+```
+
+dirección:
+
+**abajo → arriba**
+
+### Row 2
+
+Se continúa desde arriba y se baja:
+
+```text
+      4
+      │
+      5
+      │
+      6
+```
+
+Orden:
+
+```text
+4 → 5 → 6
+```
+
+dirección:
+
+**arriba → abajo**
+
+### Row 3
+
+Se vuelve a subir:
+
+```text
+      9
+      │
+      8
+      │
+      7
+```
+
+Orden:
+
+```text
+7 → 8 → 9
+```
+
+dirección:
+
+**abajo → arriba**
+
+### Row 4
+
+Se vuelve a bajar:
+
+```text
+      10
+       │
+      11
+       │
+      12
+```
+
+Orden:
+
+```text
+10 → 11 → 12
+```
+
+dirección:
+
+**arriba → abajo**
+
+Regla general:
+
+```text
+Row impar → abajo → arriba
+Row par   → arriba → abajo
+```
+
+---
+
+# 4. Múltiples Grids
+
+El Layout puede contener múltiples Grids.
+
+Los Grids NO tienen numeraciones independientes.
+
+La numeración continúa entre Grids.
+
+Los Grids se recorren en el mismo orden en que están posicionados horizontalmente sobre el eje X positivo:
+
+```text
+Grid 1 → Grid 2 → Grid 3 → ...
+```
+
+Ejemplo:
+
+```text
+Grid 1
+Treatment A → 1 ... 30
+
+Grid 2
+Treatment A → 31 ... 60
+
+Grid 3
+Treatment A → 61 ... 90
+```
+
+La secuencia NO se reinicia al comenzar un nuevo Grid.
+
+Cada Grid mantiene la misma lógica de recorrido:
+
+```text
+Row impar → abajo → arriba
+Row par   → arriba → abajo
+```
+
+---
+
+# 5. Cada Treatment tiene su propia secuencia dentro de todos los Grids
+
+Ejemplo:
+
+```text
+Treatment A
+
+Grid 1:
+1 → 30
+
+Grid 2:
+31 → 60
+
+
+Treatment B
+
+Grid 1:
+1 → 20
+
+Grid 2:
+21 → 40
+```
+
+La numeración de Treatment A no afecta a Treatment B.
+
+---
+
+# 6. Nuevas Vines después de Numbering
+
+Si una nueva Vine es creada después de que ya existe numeración:
+
+* no se deben modificar los números existentes;
+* no se debe renumerar el Layout completo;
+* la nueva Vine debe recibir un nuevo número dentro de su Treatment cuando corresponda;
+* nunca se deben desplazar los números existentes.
+
+Ejemplo:
+
+```text
+Antes:
+
+1
+2
+3
+4
+5
+```
+
+Se crea una nueva Vine:
+
+```text
+1
+2
+3
+4
+5
+6 ← nueva
+```
+
+Aunque físicamente la nueva Vine haya sido creada entre las Vines 2 y 3, NO se insertan números ni se renumeran las demás.
+
+---
+
+# 7. Eliminación de Vines
+
+Al eliminar una Vine:
+
+* se elimina también su número;
+* los números restantes NO cambian.
+
+Ejemplo:
+
+```text
+1
+2
+3
+4
+5
+```
+
+Se elimina la Vine #3:
+
+```text
+1
+2
+4
+5
+```
+
+NO debe convertirse automáticamente en:
+
+```text
+1
+2
+3
+4
+```
+
+Los números representan identificación física y no deben cambiar automáticamente.
+
+---
+
+# 8. Reingresar a Numbering Mode
+
+Si el usuario sale de Numbering y posteriormente vuelve a entrar:
+
+* NO se debe volver a numerar todo;
+* NO se deben cambiar números existentes;
+* solamente se deben considerar Vines que todavía tengan:
+
+```ts
+number === null
+```
+
+Esto permite mantener las modificaciones manuales del usuario.
+
+---
+
+# 9. Modificación manual de números
+
+Dentro de Numbering Mode, cada Vine muestra visualmente su número.
+
+Ejemplo:
+
+```text
+      ● 12
+```
+
+El usuario puede modificar la numeración directamente desde la Vine.
+
+### Tap / Click
+
+Al tocar una Vine:
+
+```text
+number + 1
+```
+
+Ejemplo:
+
+```text
+12 → 13
+```
+
+### Long Press
+
+Al hacer long press sobre una Vine:
+
+```text
+number = 1
+```
+
+Esto permite volver rápidamente la Vine al número 1.
+
+La interacción de Numbering debe ser independiente del comportamiento normal de las Vines.
+
+---
+
+# 10. Visualización de conflictos
+
+Los números deben mostrar visualmente si existe un conflicto.
+
+Un número es conflicto si el mismo `number` aparece más de una vez dentro del mismo Treatment.
+
+Ejemplo:
+
+```text
+Treatment A
+
+Vine → #1 🟢
+Vine → #2 🟢
+Vine → #2 🔴
+Vine → #3 🟢
+```
+
+Los colores:
+
+```text
+Número único → verde
+Número duplicado dentro del mismo Treatment → rojo
+```
+
+El conflicto debe evaluarse utilizando:
+
+```text
+treatmentId + number
+```
+
+NO solamente:
+
+```text
+number
+```
+
+Por lo tanto:
+
+```text
+Treatment A → #1
+Treatment B → #1
+```
+
+NO es conflicto.
+
+---
+
+# 11. Visualización de Numbering Mode
+
+Al entrar en Numbering Mode, el Grid debe cambiar visualmente para dejar claro que se está editando numeración.
+
+Las Vines deben mostrar su número directamente dentro o junto a su representación.
+
+Ejemplo:
+
+```text
+Normal:
+
+      ●       ■       ●
+
+
+Numbering:
+
+      ●1      ■2      ●3
+```
+
+Se puede utilizar una apariencia visual diferente para Numbering Mode, siempre que sea clara y no destruya la lectura del Grid.
+
+---
+
+# 12. Gender durante Numbering
+
+Las Vines mantienen su representación normal:
+
+```text
+Female → círculo
+Male   → cuadrado
+```
+
+El número se muestra sobre/dentro de la Vine.
+
+---
+
+# 13. Treatment obligatorio para Numbering
+
+Una Vine solamente participa en Numbering si:
+
+```ts
+treatmentId !== null
+```
+
+Las Vines sin Treatment:
+
+```ts
+treatmentId === null
+```
+
+NO reciben número y NO participan en conflictos.
+
+No deben mostrar número en Numbering Mode.
+
+---
+
+# 14. Número independiente del Treatment visual
+
+El número pertenece a la Vine, pero su secuencia se administra por Treatment.
+
+El campo continúa siendo:
+
+```ts
+number: number | null
+```
+
+El Treatment se referencia mediante:
+
+```ts
+treatmentId: UUID | null
+```
+
+No almacenar el nombre del Treatment dentro de la Vine.
+
+---
+
+# 15. Número de Rows — funcionalidad futura independiente
+
+En algún momento se agregarán números visuales a las Rows.
+
+Estos números serán exclusivamente visuales y NO tendrán impacto sobre:
+
+* `rowNumber`
+* Bays
+* Vines
+* Treatments
+* Numbering Mode
+* organización interna del Layout
+
+La idea visual es tener un pequeño punto interactivo en los extremos de cada Row:
+
+```text
+       ● 12
+       │
+       │
+       │
+       │
+       ● 12
+```
+
+El usuario podrá tocar/click el punto para introducir o editar el número visual de esa Row.
+
+El número debe aparecer en ambos extremos:
+
+```text
+inicio de Row → número
+final de Row   → número
+```
+
+Esta funcionalidad será implementada posteriormente y debe mantenerse completamente separada de la lógica interna de Rows.
+
+---
+
+# Resumen de reglas
+
+```text
+NUMBERING MODE
+
+✓ Se activa desde Tools → Numbering
+✓ Primera entrada → asigna números automáticamente
+✓ Solo Vines con Treatment
+✓ Cada Treatment tiene su propia secuencia
+✓ Vines sin Treatment → sin número
+✓ Row impar → abajo → arriba
+✓ Row par → arriba → abajo
+✓ Recorrido de Rows → izquierda → derecha
+✓ Múltiples Grids → continúan la misma secuencia
+✓ Grid 2 no reinicia numeración
+✓ Salir de Numbering → números permanecen
+✓ Volver a entrar → no renumerar existentes
+✓ Nuevas Vines → no modifican números existentes
+✓ Vines eliminadas → no renumeran las restantes
+✓ Tap → número +1
+✓ Long press → número = 1
+✓ Número duplicado dentro del mismo Treatment → rojo
+✓ Número único → verde
+✓ Mismo número en Treatments diferentes → válido
+✓ Numbering es independiente del sistema de Treatments
+✓ Numbering es independiente de la posición física
+✓ Numbering es independiente del número visual de las Rows
+```
