@@ -17,7 +17,7 @@ function createId(): UUID {
 
 import { Canvas } from "@/components/layout-editor/Canvas";
 import { GridView } from "@/components/layout-editor/GridView";
-import { pixelToBay } from "@/lib/grid-geometry";
+import { computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
 
 export default function TestGridPage() {
@@ -81,10 +81,7 @@ export default function TestGridPage() {
       rows: Number(rows),
       bayColumns: Number(bayColumns),
       cells: [],
-      position: {
-        x: 0,
-        y: 0,
-      },
+      position: computeNextGridPosition(projectData.grids),
       rotation: 0,
       layer: 1,
     };

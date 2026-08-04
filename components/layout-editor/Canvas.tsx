@@ -236,25 +236,29 @@ export function Canvas({
     longPressStartPosition.current = null;
   };
 
-  const startLongPressTimer = (touch: Touch) => {
+  const fireLongPress = (clientX: number, clientY: number) => {
+    console.log("[LONG PRESS] TRIGGERED");
+    const svg = svgRef.current;
+    const contentGroup = contentGroupRef.current;
+    const point =
+      svg && contentGroup
+        ? screenClientToContentPoint(svg, contentGroup, clientX, clientY)
+        : null;
+    onLongPressRef.current?.(clientX, clientY, point);
+    longPressTriggered.current = true;
+  };
+
+  const startLongPressTimerAt = (
+    startPos: ScreenPoint,
+    getCurrentPosition: () => ScreenPoint
+  ) => {
     clearLongPressTimer();
-    const startPos = { x: touch.clientX, y: touch.clientY };
     longPressStartPosition.current = startPos;
     console.log("[LONG PRESS] timer started");
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null;
-      console.log("[LONG PRESS] TRIGGERED");
-      const activeTouch = activeTouches.current.values().next().value;
-      const clientX = activeTouch?.x ?? startPos.x;
-      const clientY = activeTouch?.y ?? startPos.y;
-      const svg = svgRef.current;
-      const contentGroup = contentGroupRef.current;
-      const point =
-        svg && contentGroup
-          ? screenClientToContentPoint(svg, contentGroup, clientX, clientY)
-          : null;
-      onLongPressRef.current?.(clientX, clientY, point);
-      longPressTriggered.current = true;
+      const current = getCurrentPosition();
+      fireLongPress(current.x, current.y);
     }, LONG_PRESS_DURATION);
   };
 
@@ -329,7 +333,12 @@ export function Canvas({
         cancelLongPress("second finger");
         if (e.touches.length === 2) initPinchFromTouches(e.touches);
       } else if (e.touches.length === 1) {
-        startLongPressTimer(e.touches[0]);
+        const touch = e.touches[0];
+        const startPos = { x: touch.clientX, y: touch.clientY };
+        startLongPressTimerAt(startPos, () => {
+          const activeTouch = activeTouches.current.values().next().value;
+          return activeTouch ?? startPos;
+        });
       }
     };
 
@@ -443,11 +452,20 @@ export function Canvas({
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "touch") return;
+    if (e.button !== 0) return;
 
     rotateWithPointer.current = e.shiftKey;
     isMouseDragging.current = false;
     gestureMoved.current = false;
-    activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    longPressTriggered.current = false;
+
+    const startPos = { x: e.clientX, y: e.clientY };
+    activeTouches.current.set(e.pointerId, startPos);
+
+    if (!e.shiftKey) {
+      const pointerId = e.pointerId;
+      startLongPressTimerAt(startPos, () => activeTouches.current.get(pointerId) ?? startPos);
+    }
   }, []);
 
   const handlePointerMove = useCallback(
@@ -460,6 +478,17 @@ export function Canvas({
       const currentPosition = { x: e.clientX, y: e.clientY };
       const dx = currentPosition.x - previousPosition.x;
       const dy = currentPosition.y - previousPosition.y;
+
+      const longPressStart = longPressStartPosition.current;
+      if (longPressStart) {
+        const movedFromStart = Math.hypot(
+          currentPosition.x - longPressStart.x,
+          currentPosition.y - longPressStart.y
+        );
+        if (movedFromStart > DRAG_THRESHOLD) {
+          cancelLongPress(`moved ${movedFromStart.toFixed(1)}px`);
+        }
+      }
 
       if (!isMouseDragging.current && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
         isMouseDragging.current = true;
@@ -493,7 +522,10 @@ export function Canvas({
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.pointerType === "touch") return;
 
-      if (!gestureMoved.current && !rotateWithPointer.current) {
+      const triggeredLongPress = longPressTriggered.current;
+      cancelLongPress("pointer up", triggeredLongPress);
+
+      if (!gestureMoved.current && !rotateWithPointer.current && !triggeredLongPress) {
         forwardClick(e.clientX, e.clientY);
       }
 
@@ -501,6 +533,7 @@ export function Canvas({
       isMouseDragging.current = false;
       rotateWithPointer.current = false;
       gestureMoved.current = false;
+      longPressTriggered.current = false;
 
       if (overlayRef.current?.hasPointerCapture(e.pointerId)) {
         overlayRef.current.releasePointerCapture(e.pointerId);

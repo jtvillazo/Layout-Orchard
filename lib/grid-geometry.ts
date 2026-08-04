@@ -5,6 +5,8 @@ import type { Grid, Vine } from "@/types";
 
 export const ROW_SPACING = 80; // distancia horizontal entre rows (eje X)
 export const BAY_HEIGHT = 80; // altura de cada tramo de bay (eje Y)
+export const GRID_MIN_GAP_BAYS = 10;
+export const GRID_MIN_GAP = GRID_MIN_GAP_BAYS * BAY_HEIGHT;
 
 export interface PixelPoint {
   x: number;
@@ -115,4 +117,30 @@ export function getRowLineEndpoints(
 export function getRowLabelPosition(grid: Grid, rowNumber: number): PixelPoint {
   const { bottom } = getRowLineEndpoints(grid, rowNumber);
   return { x: bottom.x, y: bottom.y + 20 };
+}
+
+/** Borde derecho lógico del Grid (última Row), sin extensiones visuales. */
+export function getGridLogicalRightEdge(grid: Grid): number {
+  return grid.position.x + (grid.rows - 1) * ROW_SPACING;
+}
+
+/**
+ * Calcula la posición del siguiente Grid en el Layout: a la derecha del
+ * Grid más avanzado en X, con al menos GRID_MIN_GAP (10 Bays) de separación.
+ */
+export function computeNextGridPosition(
+  existingGrids: Grid[]
+): { x: number; y: number } {
+  if (existingGrids.length === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const sortedByOrder = [...existingGrids].sort((a, b) => a.order - b.order);
+  const anchorY = sortedByOrder[0].position.y;
+  const maxRightEdge = Math.max(...existingGrids.map(getGridLogicalRightEdge));
+
+  return {
+    x: maxRightEdge + GRID_MIN_GAP,
+    y: anchorY,
+  };
 }
