@@ -16,6 +16,7 @@ interface TreatmentsMenuProps {
   onDeleteTreatment: (treatment: Treatment) => void;
   onCreateTreatment: () => void;
   onImportTreatments: () => void;
+  className?: string;
 }
 
 function TreatmentContextPopup({
@@ -67,6 +68,7 @@ export function TreatmentsMenu({
   onDeleteTreatment,
   onCreateTreatment,
   onImportTreatments,
+  className = "",
 }: TreatmentsMenuProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -94,14 +96,14 @@ export function TreatmentsMenu({
     <div
       ref={menuRef}
       data-treatment-menu="true"
-      className="absolute right-4 top-32 z-40 w-52 rounded-xl border border-gray-200 bg-white shadow-md"
+      className={`w-full max-w-[7.4rem] rounded-lg border border-gray-200 bg-white shadow-md sm:max-w-none sm:rounded-xl lg:w-52 ${className}`}
     >
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex min-h-10 w-full items-center justify-between px-2 py-1.5 text-left sm:min-h-11 sm:px-4 sm:py-3"
       >
-        <span className="text-sm font-semibold text-gray-800">Treatments</span>
+        <span className="text-xs font-semibold text-gray-800 sm:text-sm">Treatments</span>
         <span className="text-xs text-gray-500">{expanded ? "▲" : "▼"}</span>
       </button>
 
@@ -145,7 +147,7 @@ export function TreatmentsMenu({
                         event.stopPropagation();
                         onToggleSelectTreatment(treatment.id);
                       }}
-                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-50 ${
+                      className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs active:bg-gray-50 sm:text-sm ${
                         isSelected ? "bg-[#f3f7f4]" : ""
                       }`}
                     >
@@ -177,7 +179,7 @@ export function TreatmentsMenu({
           <button
             type="button"
             onClick={onCreateTreatment}
-            className="mt-2 w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-[#2f4034] hover:bg-gray-50"
+            className="mt-2 min-h-10 w-full rounded-lg px-2 py-2 text-left text-xs font-medium text-[#2f4034] active:bg-gray-50 sm:text-sm"
           >
             + Create new Treatment
           </button>
@@ -185,7 +187,7 @@ export function TreatmentsMenu({
           <button
             type="button"
             onClick={onImportTreatments}
-            className="mt-1 w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-[#2f4034] hover:bg-gray-50"
+            className="mt-1 min-h-10 w-full rounded-lg px-2 py-2 text-left text-xs font-medium text-[#2f4034] active:bg-gray-50 sm:text-sm"
           >
             Import from another Layout
           </button>

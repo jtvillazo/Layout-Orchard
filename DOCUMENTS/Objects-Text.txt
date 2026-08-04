@@ -1,0 +1,955 @@
+# Objects + Texts — Implementation Specification
+
+## Objetivo
+
+Implementar simultáneamente dos nuevas herramientas de edición para el Layout:
+
+* **Objects**
+* **Texts**
+
+Ambas deben integrarse al sistema existente de `ToolsMenu`, pero deben aparecer como **dos herramientas independientes**.
+
+El usuario debe poder activar:
+
+```text
+Tools
+├── Create Grid
+├── Numbering
+├── Objects
+└── Texts
+```
+
+No combinar Objects y Texts en una sola herramienta.
+
+---
+
+# 1. Reglas generales
+
+La aplicación es **mobile-first** y funciona como una web app de edición de layouts.
+
+Objects y Texts deben seguir el mismo concepto de interacción que ya existe en Numbering y Treatments:
+
+* interacción mediante touch/click;
+* compatible con mouse;
+* long press debe funcionar correctamente en dispositivos táctiles cuando sea necesario;
+* no interferir con el sistema de pan/zoom/rotation existente del Canvas;
+* no romper Numbering;
+* no romper Treatments;
+* no modificar innecesariamente la lógica existente de Vines.
+
+Antes de implementar, revisar cómo está construido actualmente:
+
+* `Canvas`
+* `ToolsMenu`
+* `GridView`
+* manejo de `pointer events`
+* persistencia actual del layout
+* tipos en `@/types`
+* sistema de selección de Vines
+* sistema de popups/modales.
+
+Reutilizar patrones existentes siempre que sea posible.
+
+---
+
+# 2. Objects Tool
+
+Al seleccionar:
+
+```text
+Tools → Objects
+```
+
+se activa `Objects Mode`.
+
+El usuario debe poder crear objetos visuales independientes de:
+
+* Grids
+* Rows
+* Bays
+* Vines
+* Treatments.
+
+Un Object pertenece al Layout.
+
+Ejemplos futuros de Objects podrían ser:
+
+* edificio
+* camino
+* estanque
+* poste
+* bodega
+* árbol externo
+* zona de trabajo
+* cualquier elemento visual del orchard.
+
+Por ahora implementar una versión simple y funcional.
+
+---
+
+# 3. Creación de Object
+
+Cuando `Objects Mode` está activo:
+
+El usuario puede crear un Object en una posición vacía del Canvas mediante interacción táctil/mouse.
+
+Preferentemente:
+
+```text
+tap/click → crear Object
+```
+
+La creación debe producir un elemento visual claramente visible.
+
+No debe crear Vines.
+
+No debe utilizar la lógica de creación de Vines existente.
+
+El Object debe quedar seleccionado después de crearse.
+
+---
+
+# 4. Object seleccionado
+
+Cuando un Object está seleccionado debe existir una forma clara de saberlo visualmente.
+
+Al seleccionar un Object, mostrar un pequeño contexto de edición similar al concepto utilizado para Vines.
+
+Por ejemplo:
+
+```text
+┌─────────────┐
+│ Edit        │
+│ Delete      │
+└─────────────┘
+```
+
+No es necesario copiar exactamente el diseño de `VineContextPopup`.
+
+La interacción debe ser consistente con el resto de la aplicación.
+
+---
+
+# 5. Edit Object
+
+Al seleccionar:
+
+```text
+Edit
+```
+
+abrir un modal de edición.
+
+La primera versión puede contener solamente los atributos necesarios para definir visualmente el Object.
+
+Como mínimo considerar:
+
+* nombre
+* tipo
+* tamaño
+* color
+
+No crear todavía un sistema excesivamente complejo.
+
+La arquitectura debe permitir agregar propiedades posteriormente.
+
+---
+
+# 6. Mover Object
+
+Los Objects deben poder ser posicionados libremente dentro del Canvas.
+
+La posición de un Object es independiente de:
+
+* Grid
+* Row
+* Bay
+* Vine.
+
+No debe estar asociado a una celda del Grid.
+
+Debe poder existir entre Grids o fuera de ellos.
+
+La posición debe persistirse.
+
+---
+
+# 7. Eliminar Object
+
+Desde el contexto del Object:
+
+```text
+Delete
+```
+
+debe eliminarlo del Layout.
+
+No debe afectar:
+
+* Grids
+* Vines
+* Treatments
+* Rows
+* Numbering.
+
+---
+
+# 8. Texts Tool
+
+Al seleccionar:
+
+```text
+Tools → Texts
+```
+
+se activa `Texts Mode`.
+
+Debe ser independiente de:
+
+```text
+Objects Mode
+```
+
+aunque ambos compartan arquitectura de interacción cuando sea posible.
+
+---
+
+# 9. Crear Text
+
+Con `Texts Mode` activo:
+
+```text
+tap/click sobre Canvas
+```
+
+crea un Text en esa posición.
+
+Después de crearlo, debe quedar seleccionado y permitir introducir el contenido.
+
+La experiencia ideal sería:
+
+```text
+Tap Canvas
+     ↓
+Create Text
+     ↓
+Text modal/input
+     ↓
+"Pump House"
+     ↓
+Save
+     ↓
+Texto visible en Canvas
+```
+
+No utilizar un prompt nativo del navegador.
+
+Crear un modal o interfaz consistente con los otros modales de la aplicación.
+
+---
+
+# 10. Edit Text
+
+Un Text seleccionado debe permitir:
+
+```text
+Edit
+Delete
+```
+
+Edit debe abrir un modal.
+
+Como mínimo:
+
+```text
+Text
+```
+
+campo para modificar el contenido.
+
+La arquitectura debe permitir agregar posteriormente:
+
+* font size
+* font weight
+* alignment
+* color
+* rotation.
+
+No es necesario implementar todas esas opciones ahora.
+
+---
+
+# 11. Mover Text
+
+Los Texts deben poder posicionarse libremente en el Canvas.
+
+No deben depender de:
+
+* Grid
+* Row
+* Bay
+* Vine.
+
+Su posición debe ser independiente y persistible.
+
+---
+
+# 12. Visualización
+
+Objects y Texts deben renderizarse como elementos independientes dentro del Canvas.
+
+Deben respetar correctamente:
+
+* pan
+* zoom
+* rotation
+* posición del Canvas.
+
+No deben quedar fijos respecto a la pantalla.
+
+Deben moverse con el Layout.
+
+---
+
+# 13. Data Model
+
+Crear tipos nuevos solamente si son necesarios.
+
+Por ejemplo, conceptualmente:
+
+```ts
+Object {
+  id: UUID;
+  layoutId: UUID;
+  type: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+}
+```
+
+y:
+
+```ts
+TextElement {
+  id: UUID;
+  layoutId: UUID;
+  text: string;
+  x: number;
+  y: number;
+}
+```
+
+Los nombres exactos pueden adaptarse a la arquitectura existente.
+
+IMPORTANTE:
+
+No almacenar Objects o Texts dentro de `Vine`.
+
+No relacionarlos artificialmente con Grid/Row/Bay.
+
+Son elementos independientes del Layout.
+
+---
+
+# 14. Persistencia
+
+Los nuevos elementos deben integrarse con el sistema actual de persistencia del proyecto.
+
+Actualmente el proyecto utiliza `localStorage`.
+
+Agregar las estructuras necesarias al `ProjectData` existente.
+
+Por ejemplo conceptualmente:
+
+```ts
+objects: Object[];
+texts: TextElement[];
+```
+
+No crear otro sistema de almacenamiento independiente.
+
+Debe seguir existiendo una única fuente de datos para el Layout.
+
+---
+
+# 15. ToolsMenu
+
+Actualizar el Tools Menu existente.
+
+Debe quedar conceptualmente:
+
+```text
+Tools
+
+Create Grid
+
+Numbering
+
+Objects
+
+Texts
+```
+
+Objects y Texts deben ser botones independientes.
+
+Al activar Objects:
+
+```text
+Objects = active
+Numbering = inactive
+Texts = inactive
+```
+
+Al activar Texts:
+
+```text
+Texts = active
+Objects = inactive
+Numbering = inactive
+```
+
+No permitir múltiples edit modes incompatibles simultáneamente.
+
+`Create Grid` continúa funcionando como acción para abrir el modal existente y no necesariamente como un modo persistente.
+
+---
+
+# 16. Visual indication of active mode
+
+Objects y Texts deben indicar claramente cuando están activos.
+
+Seguir el patrón visual ya utilizado para:
+
+```text
+Numbering Mode
+```
+
+pero utilizar una indicación adecuada para cada herramienta.
+
+El usuario debe poder saber inmediatamente:
+
+```text
+Objects Mode
+```
+
+o
+
+```text
+Texts Mode
+```
+
+sin confundirse con Numbering.
+
+---
+
+# 17. Canvas interaction
+
+MUY IMPORTANTE.
+
+El Canvas actual tiene lógica compleja de:
+
+* pointer down
+* pointer move
+* pointer up
+* drag
+* pan
+* zoom
+* rotation
+* long press
+* forwarded click.
+
+No reemplazar esa arquitectura.
+
+Integrar Objects y Texts dentro del sistema actual.
+
+No introducir handlers paralelos que generen conflictos con:
+
+```text
+Canvas pan
+Canvas zoom
+Canvas rotation
+Vine long press
+Vine click
+Numbering
+```
+
+Especialmente en mobile.
+
+---
+
+# 18. Selección
+
+Cuando Objects Mode o Texts Mode están activos:
+
+El usuario debe poder seleccionar solamente el tipo de elemento correspondiente.
+
+Por ejemplo:
+
+Objects Mode:
+
+```text
+Object → seleccionable
+Text → no seleccionable
+Vine → no entra en edición normal
+```
+
+Texts Mode:
+
+```text
+Text → seleccionable
+Object → no seleccionable
+Vine → no entra en edición normal
+```
+
+Esto evita conflictos entre herramientas.
+
+---
+
+# 19. Salir del modo
+
+Al seleccionar otra herramienta desde Tools Menu:
+
+```text
+Objects → Numbering
+Objects → Texts
+Objects → normal
+```
+
+debe limpiarse cualquier selección de Object.
+
+Lo mismo para Texts.
+
+No dejar popups abiertos de una herramienta anterior.
+
+---
+
+# 20. Responsive / Mobile First
+
+La implementación debe funcionar correctamente en:
+
+* teléfono pequeño
+* teléfono grande
+* tablet
+* laptop/desktop.
+
+No asumir que existe suficiente espacio horizontal.
+
+Los modales deben adaptarse al ancho disponible.
+
+Los popups no deben quedar fuera de la pantalla.
+
+Los controles táctiles deben tener un área suficientemente grande.
+
+No utilizar hover como mecanismo necesario para activar una función.
+
+Toda acción importante debe funcionar mediante:
+
+```text
+click / tap
+```
+
+---
+
+# 21. No modificar funcionalidades existentes
+
+No cambiar el comportamiento actual de:
+
+* Numbering
+* Treatments
+* Create Grid
+* Vine creation
+* Vine editing
+* Vine deletion
+* Treatment import
+* Treatment editing
+* Treatment deletion.
+
+Si es necesario modificar una parte para integrar Objects/Text, hacerlo de forma mínima y manteniendo el comportamiento existente.
+
+---
+
+# 22. Objetivo de esta implementación
+
+La prioridad es obtener una primera versión funcional y limpia:
+
+```text
+Objects
+    ↓
+Create
+    ↓
+Select
+    ↓
+Edit
+    ↓
+Move
+    ↓
+Delete
+    ↓
+Persist
+
+Texts
+    ↓
+Create
+    ↓
+Select
+    ↓
+Edit
+    ↓
+Move
+    ↓
+Delete
+    ↓
+Persist
+```
+
+No sobrecomplicar la primera versión.
+
+La arquitectura debe quedar preparada para ampliar posteriormente Objects y Texts con más propiedades.
+
+Antes de terminar, verificar manualmente:
+
+* desktop
+* mobile
+* pan
+* zoom
+* rotation
+* click
+* tap
+* long press
+* creación
+* edición
+* movimiento
+* eliminación
+* persistencia después de recargar
+* cambio entre Objects / Texts / Numbering
+* que Treatments continúe funcionando.
+
+
+# Objects — Predefined Object Types
+
+## Concepto
+
+Los Objects del Layout no serán únicamente figuras genéricas.
+
+La herramienta **Objects** debe ofrecer una colección de **tipos de objetos predefinidos** que el usuario pueda colocar sobre el Layout.
+
+Ejemplos iniciales:
+
+```text
+Objects
+
+Sensor
+Camera
+Water
+```
+
+La lista debe estar preparada para crecer posteriormente con otros tipos.
+
+---
+
+## 1. Object Type
+
+Un Object debe tener un tipo definido.
+
+Conceptualmente:
+
+```ts
+type ObjectType =
+  | "sensor"
+  | "camera"
+  | "water";
+```
+
+Sin embargo, diseñar la arquitectura de forma que agregar posteriormente:
+
+```text
+weather_station
+pump
+building
+gate
+road
+power
+custom_object
+...
+```
+
+no requiera modificar toda la lógica de Objects.
+
+---
+
+## 2. Object Picker
+
+Al activar:
+
+```text
+Tools → Objects
+```
+
+el usuario debe tener acceso a una pequeña interfaz para elegir qué tipo de Object quiere crear.
+
+Por ejemplo:
+
+```text
+Objects
+
+[ Sensor ]
+[ Camera ]
+[ Water ]
+```
+
+El usuario selecciona un tipo y luego toca/click en el Canvas para colocar ese objeto.
+
+Flujo:
+
+```text
+Tools
+  ↓
+Objects
+  ↓
+Select object type
+  ↓
+Sensor
+  ↓
+Tap Canvas
+  ↓
+Sensor creado
+```
+
+---
+
+## 3. Iconos
+
+Cada Object Type tendrá su propio icono.
+
+Los iconos serán archivos gráficos que serán agregados posteriormente por el desarrollador.
+
+NO crear todavía los iconos definitivos.
+
+La arquitectura debe permitir definir algo similar a:
+
+```ts
+interface ObjectTypeDefinition {
+  type: ObjectType;
+  name: string;
+  icon: string;
+}
+```
+
+o una estructura equivalente compatible con la arquitectura existente.
+
+El icono debe poder utilizarse tanto:
+
+* en el selector de Objects;
+* como en el Canvas.
+
+---
+
+## 4. No utilizar emojis como solución definitiva
+
+No utilizar emojis como representación final de:
+
+```text
+Sensor
+Camera
+Water
+```
+
+Si se necesitan placeholders durante el desarrollo, pueden utilizarse temporalmente, pero la arquitectura debe estar preparada para reemplazarlos posteriormente por archivos SVG/PNG propios.
+
+---
+
+## 5. Los iconos son independientes del Object
+
+El Object debe almacenar su tipo, no depender directamente de un archivo específico.
+
+Por ejemplo:
+
+```ts
+{
+  id,
+  layoutId,
+  type: "sensor",
+  x,
+  y
+}
+```
+
+El renderer determina qué icono corresponde a:
+
+```ts
+type === "sensor"
+```
+
+Esto permitirá cambiar el icono posteriormente sin modificar los datos existentes.
+
+---
+
+## 6. Object properties
+
+La primera versión debe mantenerlo simple.
+
+Un Object debería almacenar como mínimo:
+
+```ts
+{
+  id: UUID;
+  layoutId: UUID;
+  type: ObjectType;
+  x: number;
+  y: number;
+}
+```
+
+Se pueden agregar posteriormente propiedades como:
+
+```text
+name
+comment
+rotation
+scale
+width
+height
+```
+
+No implementar propiedades innecesarias todavía.
+
+---
+
+## 7. Object selector y creación
+
+La selección del tipo de Object y la creación deben ser dos pasos separados.
+
+Ejemplo:
+
+```text
+[ Sensor ] [ Camera ] [ Water ]
+```
+
+Después:
+
+```text
+Sensor seleccionado
+       ↓
+Tap Canvas
+       ↓
+Object creado
+```
+
+Esto permitirá posteriormente agregar muchos más tipos sin complicar el Canvas.
+
+---
+
+## 8. Edición
+
+Al seleccionar un Object ya creado, debe aparecer su contexto:
+
+```text
+Edit
+Delete
+```
+
+Editar debe permitir, como mínimo, modificar las propiedades que ya estén implementadas.
+
+El tipo del Object también debería poder cambiarse posteriormente, pero no es obligatorio implementarlo en la primera versión si complica innecesariamente la UI.
+
+---
+
+## 9. Preparación para futuros iconos
+
+No asumir una cantidad fija de Objects.
+
+La arquitectura debe permitir agregar nuevos tipos simplemente incorporando una nueva definición, por ejemplo:
+
+```ts
+{
+  type: "sensor",
+  name: "Sensor",
+  icon: "/icons/objects/sensor.svg"
+}
+```
+
+y posteriormente:
+
+```ts
+{
+  type: "camera",
+  name: "Camera",
+  icon: "/icons/objects/camera.svg"
+}
+```
+
+Los archivos definitivos serán agregados posteriormente.
+
+---
+
+## 10. Mobile-first
+
+El selector de Objects debe funcionar correctamente en:
+
+* teléfonos;
+* tablets;
+* laptops.
+
+No depender de hover.
+
+La selección debe funcionar mediante:
+
+```text
+tap / click
+```
+
+Los botones deben tener un área táctil cómoda.
+
+No ocupar innecesariamente una gran parte de la pantalla en teléfonos.
+
+---
+
+## 11. Mantener Objects y Texts separados
+
+Objects y Texts continúan siendo herramientas independientes:
+
+```text
+Tools
+├── Create Grid
+├── Numbering
+├── Objects
+└── Texts
+```
+
+Objects tendrá su propio selector de tipos.
+
+Texts tendrá su propia lógica de creación de texto.
+
+No mezclar ambas herramientas.
+
+---
+
+## Objetivo
+
+La primera versión debe permitir:
+
+```text
+Tools
+  ↓
+Objects
+  ↓
+Choose Sensor / Camera / Water
+  ↓
+Tap Canvas
+  ↓
+Object appears using its corresponding icon
+  ↓
+Select Object
+  ↓
+Edit / Delete
+  ↓
+Move
+  ↓
+Persist
+```
+
+La arquitectura debe quedar preparada para que posteriormente sea sencillo agregar nuevos tipos de Objects y reemplazar los iconos placeholder por los iconos definitivos del proyecto.

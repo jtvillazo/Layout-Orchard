@@ -17,11 +17,26 @@ const MAX_ZOOM_WIDTH = 4000;
 const DRAG_THRESHOLD = 6;
 const LONG_PRESS_DURATION = 600;
 
+export type CanvasDragIntent = "pan" | "element";
+
 interface CanvasProps {
   children: React.ReactNode;
   initialViewBox?: ViewBox;
   onLongPress?: (clientX: number, clientY: number, point: PixelPoint | null) => void;
-  onSurfaceClick?: (target: Element | null, clientX: number, clientY: number) => void;
+  onSurfaceClick?: (
+    target: Element | null,
+    clientX: number,
+    clientY: number,
+    contentPoint: PixelPoint | null
+  ) => void;
+  getDragIntent?: (
+    target: Element | null,
+    clientX: number,
+    clientY: number,
+    contentPoint: PixelPoint | null
+  ) => CanvasDragIntent;
+  onElementDrag?: (contentPoint: PixelPoint) => void;
+  onElementDragEnd?: () => void;
 }
 
 type ScreenPoint = { x: number; y: number };
@@ -37,6 +52,9 @@ export function Canvas({
   initialViewBox = { x: -450, y: -1000, width: 1500, height: 1850 },
   onLongPress,
   onSurfaceClick,
+  getDragIntent,
+  onElementDrag,
+  onElementDragEnd,
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
   const [rotation, setRotation] = useState(0);
@@ -64,10 +82,17 @@ export function Canvas({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggered = useRef(false);
   const longPressStartPosition = useRef<ScreenPoint | null>(null);
+  const elementDragActive = useRef(false);
   const onLongPressRef = useRef(onLongPress);
   onLongPressRef.current = onLongPress;
   const onSurfaceClickRef = useRef(onSurfaceClick);
   onSurfaceClickRef.current = onSurfaceClick;
+  const getDragIntentRef = useRef(getDragIntent);
+  getDragIntentRef.current = getDragIntent;
+  const onElementDragRef = useRef(onElementDrag);
+  onElementDragRef.current = onElementDrag;
+  const onElementDragEndRef = useRef(onElementDragEnd);
+  onElementDragEndRef.current = onElementDragEnd;
 
   const viewBoxRef = useRef(viewBox);
   viewBoxRef.current = viewBox;
@@ -122,6 +147,41 @@ export function Canvas({
     setRotation((prev) => prev + deltaDegrees);
   }, []);
 
+  const getHitTargetAndContentPoint = useCallback((clientX: number, clientY: number) => {
+    const overlay = overlayRef.current;
+    const svg = svgRef.current;
+    const contentGroup = contentGroupRef.current;
+
+    if (!overlay || !svg || !contentGroup) {
+      return { target: null as Element | null, contentPoint: null as PixelPoint | null };
+    }
+
+    overlay.style.pointerEvents = "none";
+    const target = document.elementFromPoint(clientX, clientY);
+    overlay.style.pointerEvents = "auto";
+
+    const contentPoint = screenClientToContentPoint(
+      svg,
+      contentGroup,
+      clientX,
+      clientY
+    );
+
+    return { target, contentPoint };
+  }, []);
+
+  const finishElementDrag = useCallback(() => {
+    if (!elementDragActive.current) {
+      return;
+    }
+
+    elementDragActive.current = false;
+    onElementDragEndRef.current?.();
+  }, []);
+
+  const finishElementDragRef = useRef(finishElementDrag);
+  finishElementDragRef.current = finishElementDrag;
+
   const gestureApi = useRef({
     applyPan,
     applyZoom,
@@ -132,6 +192,16 @@ export function Canvas({
       _prevAngle: number | null
     ) => {},
     forwardClick: (_x: number, _y: number) => {},
+    getHitTargetAndContentPoint: (
+      _clientX: number,
+      _clientY: number
+    ): { target: Element | null; contentPoint: PixelPoint | null } => ({
+      target: null,
+      contentPoint: null,
+    }),
+    getDragIntent: undefined as CanvasProps["getDragIntent"],
+    onElementDrag: undefined as CanvasProps["onElementDrag"],
+    finishElementDrag: () => {},
   });
 
   const applyTwoFingerGesture = useCallback(
@@ -160,14 +230,9 @@ export function Canvas({
   );
 
   const forwardClick = useCallback((clientX: number, clientY: number) => {
-    const overlay = overlayRef.current;
-    if (!overlay) return;
+    const { target, contentPoint } = getHitTargetAndContentPoint(clientX, clientY);
 
-    overlay.style.pointerEvents = "none";
-    const target = document.elementFromPoint(clientX, clientY);
-    overlay.style.pointerEvents = "auto";
-
-    onSurfaceClickRef.current?.(target, clientX, clientY);
+    onSurfaceClickRef.current?.(target, clientX, clientY, contentPoint);
 
     if (target) {
       target.dispatchEvent(
@@ -180,7 +245,7 @@ export function Canvas({
         })
       );
     }
-  }, []);
+  }, [getHitTargetAndContentPoint]);
 
   gestureApi.current = {
     applyPan,
@@ -188,6 +253,11 @@ export function Canvas({
     applyRotationDelta,
     applyTwoFingerGesture,
     forwardClick,
+    getHitTargetAndContentPoint,
+    getDragIntent: (target, clientX, clientY, contentPoint) =>
+      getDragIntentRef.current?.(target, clientX, clientY, contentPoint) ?? "pan",
+    onElementDrag: (contentPoint) => onElementDragRef.current?.(contentPoint),
+    finishElementDrag: () => finishElementDragRef.current(),
   };
 
   const handleReset = useCallback(() => {
@@ -380,8 +450,39 @@ export function Canvas({
           );
           if (movedFromStart > DRAG_THRESHOLD) {
             cancelLongPress(`moved ${movedFromStart.toFixed(1)}px`);
+            if (!elementDragActive.current) {
+              const { target, contentPoint } = gestureApi.current.getHitTargetAndContentPoint(
+                touch.clientX,
+                touch.clientY
+              );
+              const intent =
+                gestureApi.current.getDragIntent?.(
+                  target,
+                  touch.clientX,
+                  touch.clientY,
+                  contentPoint
+                ) ?? "pan";
+              elementDragActive.current = intent === "element";
+            }
           }
         }
+
+        if (elementDragActive.current) {
+          gestureMoved.current = true;
+          const { contentPoint } = gestureApi.current.getHitTargetAndContentPoint(
+            touch.clientX,
+            touch.clientY
+          );
+          if (contentPoint) {
+            gestureApi.current.onElementDrag?.(contentPoint);
+          }
+          activeTouches.current.set(touch.identifier, {
+            x: touch.clientX,
+            y: touch.clientY,
+          });
+          return;
+        }
+
         const previous = activeTouches.current.get(touch.identifier);
         if (previous) {
           const dx = touch.clientX - previous.x;
@@ -417,6 +518,7 @@ export function Canvas({
       }
 
       cancelLongPress("touch end", longPressTriggered.current);
+      gestureApi.current.finishElementDrag();
 
       if (wasTap && !longPressTriggered.current) {
         const touch = e.changedTouches[0];
@@ -498,6 +600,18 @@ export function Canvas({
 
       if (!isMouseDragging.current && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
         isMouseDragging.current = true;
+        const { target, contentPoint } = getHitTargetAndContentPoint(
+          currentPosition.x,
+          currentPosition.y
+        );
+        const intent =
+          getDragIntentRef.current?.(
+            target,
+            currentPosition.x,
+            currentPosition.y,
+            contentPoint
+          ) ?? "pan";
+        elementDragActive.current = intent === "element";
         overlayRef.current?.setPointerCapture(e.pointerId);
       }
 
@@ -506,6 +620,17 @@ export function Canvas({
       e.preventDefault();
       gestureMoved.current = true;
       activeTouches.current.set(e.pointerId, currentPosition);
+
+      if (elementDragActive.current) {
+        const { contentPoint } = getHitTargetAndContentPoint(
+          currentPosition.x,
+          currentPosition.y
+        );
+        if (contentPoint) {
+          onElementDragRef.current?.(contentPoint);
+        }
+        return;
+      }
 
       if (rotateWithPointer.current) {
         if (!svgRef.current) return;
@@ -521,7 +646,7 @@ export function Canvas({
 
       applyPan(dx, dy);
     },
-    [applyPan, applyRotationDelta]
+    [applyPan, applyRotationDelta, getHitTargetAndContentPoint]
   );
 
   const handlePointerUp = useCallback(
@@ -530,6 +655,7 @@ export function Canvas({
 
       const triggeredLongPress = longPressTriggered.current;
       cancelLongPress("pointer up", triggeredLongPress);
+      finishElementDrag();
 
       if (!gestureMoved.current && !rotateWithPointer.current && !triggeredLongPress) {
         forwardClick(e.clientX, e.clientY);
@@ -545,7 +671,7 @@ export function Canvas({
         overlayRef.current.releasePointerCapture(e.pointerId);
       }
     },
-    [forwardClick]
+    [forwardClick, finishElementDrag]
   );
 
   const handlePointerLeave = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -553,6 +679,7 @@ export function Canvas({
     if (!activeTouches.current.has(e.pointerId)) return;
 
     cancelLongPress("pointer leave", longPressTriggered.current);
+    finishElementDrag();
 
     activeTouches.current.delete(e.pointerId);
     isMouseDragging.current = false;

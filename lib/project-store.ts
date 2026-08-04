@@ -1,4 +1,15 @@
-import { Block, Grid, Layout, Orchard, Project, Treatment, UUID, Vine } from "@/types";
+import {
+  Block,
+  Grid,
+  Layout,
+  MapObject,
+  MapText,
+  Orchard,
+  Project,
+  Treatment,
+  UUID,
+  Vine,
+} from "@/types";
 
 export interface ProjectData {
   project: Project;
@@ -8,6 +19,8 @@ export interface ProjectData {
   grids: Grid[];
   treatments?: Treatment[];
   vines?: Vine[];
+  mapObjects?: MapObject[];
+  mapTexts?: MapText[];
 }
 
 const STORAGE_KEY = "layout-orchard-projects";
@@ -114,6 +127,42 @@ export function updateLayoutVines(layoutId: UUID, vines: Vine[]) {
   }
 
   projectData.vines = vines;
+
+  saveProjects(projects);
+
+  return projectData;
+}
+
+export function updateLayoutMapObjects(layoutId: UUID, mapObjects: MapObject[]) {
+  const projects = readProjects();
+
+  const projectData = projects.find(
+    (item) => item.layout.id === layoutId
+  );
+
+  if (!projectData) {
+    return null;
+  }
+
+  projectData.mapObjects = mapObjects;
+
+  saveProjects(projects);
+
+  return projectData;
+}
+
+export function updateLayoutMapTexts(layoutId: UUID, mapTexts: MapText[]) {
+  const projects = readProjects();
+
+  const projectData = projects.find(
+    (item) => item.layout.id === layoutId
+  );
+
+  if (!projectData) {
+    return null;
+  }
+
+  projectData.mapTexts = mapTexts;
 
   saveProjects(projects);
 
