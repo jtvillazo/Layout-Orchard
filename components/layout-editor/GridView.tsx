@@ -90,6 +90,7 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
         return (
           <circle
             key={vine.id}
+            data-vine-id={vine.id}
             cx={point.x}
             cy={point.y}
             r={VINE_RADIUS}
@@ -100,7 +101,10 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
               cursor: onVineClick ? "pointer" : "default",
               pointerEvents: onVineClick ? "all" : "none",
             }}
-            onClick={() => onVineClick?.(vine)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onVineClick?.(vine);
+            }}
           />
         );
       })}

@@ -17,7 +17,8 @@ function createId(): UUID {
 
 import { Canvas } from "@/components/layout-editor/Canvas";
 import { GridView } from "@/components/layout-editor/GridView";
-import { computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
+import { VineContextPopup } from "@/components/layout-editor/VineContextPopup";
+import { bayToPixel, computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
 
 export default function TestGridPage() {
@@ -34,6 +35,7 @@ export default function TestGridPage() {
 
   // Vines del layout actual
   const [vines, setVines] = useState<Vine[]>([]);
+  const [selectedVineId, setSelectedVineId] = useState<UUID | null>(null);
 
   const rowLabels: Record<number, string> = {};
 
@@ -135,7 +137,49 @@ export default function TestGridPage() {
     });
   }
 
+  function handleDeleteVine(vineId: UUID) {
+    setVines((current) => current.filter((vine) => vine.id !== vineId));
+    setSelectedVineId(null);
+  }
+
+  function handleEditVine(vine: Vine) {
+    // Preparado para useLayoutEditor.openEditVinePopup() — falta el componente UI del editor.
+    console.log("[VINE EDIT] Editor no implementado todavía", {
+      vineId: vine.id,
+      gridId: vine.gridId,
+      rowNumber: vine.rowNumber,
+      bayIndex: vine.bayIndex,
+      slot: vine.slot,
+    });
+  }
+
+  function handleSurfaceClick(target: Element | null) {
+    if (!selectedVineId) return;
+    if (target?.closest("[data-vine-popup]")) return;
+    if (target?.closest("[data-vine-id]")) return;
+    setSelectedVineId(null);
+  }
+
   const grids = projectData?.grids ?? [];
+  const selectedVine = vines.find((vine) => vine.id === selectedVineId) ?? null;
+  const selectedVineGrid = selectedVine
+    ? grids.find((grid) => grid.id === selectedVine.gridId) ?? null
+    : null;
+  const selectedVineAnchor =
+    selectedVine && selectedVineGrid
+      ? bayToPixel(
+          selectedVineGrid,
+          selectedVine.rowNumber,
+          selectedVine.bayIndex,
+          selectedVine.slot,
+          vines.filter(
+            (vine) =>
+              vine.gridId === selectedVine.gridId &&
+              vine.rowNumber === selectedVine.rowNumber &&
+              vine.bayIndex === selectedVine.bayIndex
+          )
+        )
+      : null;
 
   return (
     <div className="relative min-h-screen">
@@ -184,6 +228,7 @@ export default function TestGridPage() {
 
       {/* Canvas */}
       <Canvas
+        onSurfaceClick={handleSurfaceClick}
         onLongPress={(_clientX, _clientY, point) => {
           if (!point || grids.length === 0) {
             return;
@@ -208,9 +253,7 @@ export default function TestGridPage() {
               )}
               treatments={[]}
               rowLabels={rowLabels}
-              onVineClick={(vine) =>
-                console.log("Click en vine:", vine.id)
-              }
+              onVineClick={(vine) => setSelectedVineId(vine.id)}
             />
           ))
         ) : (
@@ -245,6 +288,14 @@ export default function TestGridPage() {
               Create a grid to start
             </text>
           </g>
+        )}
+        {selectedVine && selectedVineAnchor && (
+          <VineContextPopup
+            anchorX={selectedVineAnchor.x}
+            anchorY={selectedVineAnchor.y}
+            onEdit={() => handleEditVine(selectedVine)}
+            onDelete={() => handleDeleteVine(selectedVine.id)}
+          />
         )}
       </Canvas>
 

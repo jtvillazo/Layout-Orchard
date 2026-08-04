@@ -21,6 +21,7 @@ interface CanvasProps {
   children: React.ReactNode;
   initialViewBox?: ViewBox;
   onLongPress?: (clientX: number, clientY: number, point: PixelPoint | null) => void;
+  onSurfaceClick?: (target: Element | null, clientX: number, clientY: number) => void;
 }
 
 type ScreenPoint = { x: number; y: number };
@@ -35,6 +36,7 @@ export function Canvas({
   children,
   initialViewBox = { x: -450, y: -1000, width: 1500, height: 1850 },
   onLongPress,
+  onSurfaceClick,
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
   const [rotation, setRotation] = useState(0);
@@ -64,6 +66,8 @@ export function Canvas({
   const longPressStartPosition = useRef<ScreenPoint | null>(null);
   const onLongPressRef = useRef(onLongPress);
   onLongPressRef.current = onLongPress;
+  const onSurfaceClickRef = useRef(onSurfaceClick);
+  onSurfaceClickRef.current = onSurfaceClick;
 
   const viewBoxRef = useRef(viewBox);
   viewBoxRef.current = viewBox;
@@ -162,6 +166,8 @@ export function Canvas({
     overlay.style.pointerEvents = "none";
     const target = document.elementFromPoint(clientX, clientY);
     overlay.style.pointerEvents = "auto";
+
+    onSurfaceClickRef.current?.(target, clientX, clientY);
 
     if (target) {
       target.dispatchEvent(
