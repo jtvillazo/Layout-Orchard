@@ -9,6 +9,9 @@ interface GridViewProps {
   vines: Vine[];
   treatments: Treatment[];
   rowLabels: Record<number, string>; // rowNumber → label asignado (sección 5)
+  numberingMode?: boolean;
+  showNumberLabels?: boolean;
+  duplicateVineIds?: Set<string>;
   onVineClick?: (vine: Vine) => void;
 }
 
@@ -16,7 +19,16 @@ const UNTREATED_COLOR = "#D1D5DB"; // gris, para vines sin treatment (sección 4
 const VINE_RADIUS = 8;
 const LINE_OVERHANG = BAY_HEIGHT * 0.1;
 
-export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: GridViewProps) {
+export function GridView({
+  grid,
+  vines,
+  treatments,
+  rowLabels,
+  numberingMode = false,
+  showNumberLabels = false,
+  duplicateVineIds,
+  onVineClick,
+}: GridViewProps) {
   const treatmentById = new Map(treatments.map((t) => [t.id, t]));
 
   // Agrupamos las vines por bay (mismo row+bay), porque bayToPixel
@@ -36,6 +48,9 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
     (_, index) => grid.position.y - index * BAY_HEIGHT
   );
 
+  const rowStroke = numberingMode ? "#9CA3AF" : "#374151";
+  const bayStrokeOpacity = numberingMode ? 0.22 : 0.35;
+
   return (
     <g style={{ userSelect: "none", WebkitUserSelect: "none" }}>
       {/* Líneas de los rows */}
@@ -51,8 +66,9 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
               y1={bottom.y + LINE_OVERHANG}
               x2={top.x}
               y2={top.y - LINE_OVERHANG}
-              stroke="#374151"
+              stroke={rowStroke}
               strokeWidth={3}
+              opacity={numberingMode ? 0.75 : 1}
             />
             {label && (
               <text
@@ -98,28 +114,34 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
           onVineClick?.(vine);
         };
 
-        if (vine.gender === "male") {
-          const size = VINE_RADIUS * 2;
-          return (
-            <rect
-              key={vine.id}
-              data-vine-id={vine.id}
-              x={point.x - VINE_RADIUS}
-              y={point.y - VINE_RADIUS}
-              width={size}
-              height={size}
-              fill={color}
-              stroke="#111827"
-              strokeWidth={1}
-              style={vineStyle}
-              onClick={handleVineClick}
-            />
-          );
-        }
+        const showLabel =
+          showNumberLabels &&
+          vine.treatmentId !== null &&
+          vine.number !== null;
+        const isDuplicate = duplicateVineIds?.has(vine.id) ?? false;
+        const labelColor = isDuplicate
+          ? "#DC2626"
+          : numberingMode
+            ? "#16A34A"
+            : "#111827";
 
-        return (
+        const shape = vine.gender === "male" ? (
+          <rect
+            key={`${vine.id}-shape`}
+            data-vine-id={vine.id}
+            x={point.x - VINE_RADIUS}
+            y={point.y - VINE_RADIUS}
+            width={VINE_RADIUS * 2}
+            height={VINE_RADIUS * 2}
+            fill={color}
+            stroke="#111827"
+            strokeWidth={1}
+            style={vineStyle}
+            onClick={handleVineClick}
+          />
+        ) : (
           <circle
-            key={vine.id}
+            key={`${vine.id}-shape`}
             data-vine-id={vine.id}
             cx={point.x}
             cy={point.y}
@@ -131,6 +153,25 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
             onClick={handleVineClick}
           />
         );
+
+        return (
+          <g key={vine.id}>
+            {shape}
+            {showLabel && (
+              <text
+                x={point.x + 12}
+                y={point.y + 4}
+                fontSize={12}
+                fontWeight={600}
+                fill={labelColor}
+                pointerEvents="none"
+                style={{ userSelect: "none", WebkitUserSelect: "none" }}
+              >
+                {`Vine ${vine.number}`}
+              </text>
+            )}
+          </g>
+        );
       })}
 
       {/* Separadores transversales entre bays (por encima de las vines) */}
@@ -141,9 +182,9 @@ export function GridView({ grid, vines, treatments, rowLabels, onVineClick }: Gr
           y1={y}
           x2={gridRightX + LINE_OVERHANG}
           y2={y}
-          stroke="#374151"
+          stroke={rowStroke}
           strokeWidth={1}
-          opacity={0.35}
+          opacity={bayStrokeOpacity}
           pointerEvents="none"
         />
       ))}

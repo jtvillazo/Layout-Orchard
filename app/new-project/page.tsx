@@ -86,6 +86,7 @@ const layoutId = createId();
       layout,
       grids: [],
       treatments: [],
+      vines: [],
     });
   
     console.log("Created project:", {

@@ -1,4 +1,94 @@
 import type { Grid, Vine } from "@/types";
+import { bayToPixel } from "@/lib/grid-geometry";
+
+const VINE_HIT_RADIUS = 12;
+
+function numerableRowKey(gridId: string, rowNumber: number): string {
+  return `${gridId}|${rowNumber}`;
+}
+
+/**
+ * Rows that contain at least one vine with treatmentId !== null are numerable.
+ * Rows with only untreated vines are buffer rows and are excluded from snake order.
+ */
+function buildNumerableRowIndexMap(
+  vines: Vine[],
+  grids: Grid[]
+): Map<string, number> {
+  const numerableRowIndexByKey = new Map<string, number>();
+  let numerableIndex = 0;
+  const gridsInOrder = [...grids].sort((a, b) => a.order - b.order);
+
+  for (const grid of gridsInOrder) {
+    const gridVines = vines.filter((vine) => vine.gridId === grid.id);
+    const numerableRows = new Set<number>();
+
+    gridVines.forEach((vine) => {
+      if (vine.treatmentId !== null) {
+        numerableRows.add(vine.rowNumber);
+      }
+    });
+
+    [...numerableRows]
+      .sort((rowA, rowB) => rowA - rowB)
+      .forEach((rowNumber) => {
+        numerableIndex += 1;
+        numerableRowIndexByKey.set(
+          numerableRowKey(grid.id, rowNumber),
+          numerableIndex
+        );
+      });
+  }
+
+  return numerableRowIndexByKey;
+}
+
+function compareVinesInSnakeOrder(
+  a: Vine,
+  b: Vine,
+  numerableRowIndexByKey: Map<string, number>
+): number {
+  const indexA = numerableRowIndexByKey.get(
+    numerableRowKey(a.gridId, a.rowNumber)
+  );
+  const indexB = numerableRowIndexByKey.get(
+    numerableRowKey(b.gridId, b.rowNumber)
+  );
+
+  if (indexA === undefined && indexB === undefined) {
+    if (a.rowNumber !== b.rowNumber) {
+      return a.rowNumber - b.rowNumber;
+    }
+    if (a.bayIndex !== b.bayIndex) {
+      return a.bayIndex - b.bayIndex;
+    }
+    return a.slot - b.slot;
+  }
+
+  if (indexA === undefined) {
+    return 1;
+  }
+
+  if (indexB === undefined) {
+    return -1;
+  }
+
+  if (indexA !== indexB) {
+    return indexA - indexB;
+  }
+
+  // Posición impar entre rows numerables → sube; par → baja.
+  const isEvenNumerableRow = indexA % 2 === 0;
+  const bayComparison = isEvenNumerableRow
+    ? b.bayIndex - a.bayIndex
+    : a.bayIndex - b.bayIndex;
+
+  if (bayComparison !== 0) {
+    return bayComparison;
+  }
+
+  return a.slot - b.slot;
+}
 
 /**
  * Determina el orden de recorrido "snake" (culebra) de las vines
@@ -9,30 +99,17 @@ import type { Grid, Vine } from "@/types";
  * perpendiculares a los rows. bayIndex representa la posición a lo largo
  * de un row (subiendo o bajando esa línea vertical), NO una fila horizontal.
  *
- * El recorrido snake entonces es: subir el Row 1 completo (bayIndex
- * ascendente), cruzar al Row 2 y bajarlo (bayIndex descendente), cruzar
- * al Row 3 y volver a subir, y así sucesivamente.
- * Dentro de un mismo bay, las vines se ordenan por slot ascendente.
+ * Buffer rows (sin ninguna vine con treatment) se ignoran por completo.
+ * La dirección zigzag usa la posición de la row entre las rows numerables
+ * del Layout, no rowNumber % 2.
  */
-function sortVinesInGridSnakeOrder(gridVines: Vine[]): Vine[] {
-  return [...gridVines].sort((a, b) => {
-    if (a.rowNumber !== b.rowNumber) {
-      return a.rowNumber - b.rowNumber;
-    }
-
-    // Row impar (1, 3, 5...) → sube (bayIndex ascendente).
-    // Row par (2, 4, 6...) → baja (bayIndex descendente).
-    const isEvenRow = a.rowNumber % 2 === 0;
-    const bayComparison = isEvenRow
-      ? b.bayIndex - a.bayIndex
-      : a.bayIndex - b.bayIndex;
-
-    if (bayComparison !== 0) {
-      return bayComparison;
-    }
-
-    return a.slot - b.slot;
-  });
+function sortVinesInGridSnakeOrder(
+  gridVines: Vine[],
+  numerableRowIndexByKey: Map<string, number>
+): Vine[] {
+  return [...gridVines].sort((a, b) =>
+    compareVinesInSnakeOrder(a, b, numerableRowIndexByKey)
+  );
 }
 
 /**
@@ -42,11 +119,15 @@ function sortVinesInGridSnakeOrder(gridVines: Vine[]): Vine[] {
  * donde quedó el primero, en vez de reiniciar.
  */
 function getAllVinesInSnakeOrder(vines: Vine[], grids: Grid[]): Vine[] {
+  const numerableRowIndexByKey = buildNumerableRowIndexMap(vines, grids);
   const gridsInOrder = [...grids].sort((a, b) => a.order - b.order);
 
   return gridsInOrder.flatMap((grid) => {
     const vinesInThisGrid = vines.filter((vine) => vine.gridId === grid.id);
-    return sortVinesInGridSnakeOrder(vinesInThisGrid);
+    return sortVinesInGridSnakeOrder(
+      vinesInThisGrid,
+      numerableRowIndexByKey
+    );
   });
 }
 
@@ -80,6 +161,182 @@ export function assignAutoSnakeNumbering(
       ? { ...vine, number: numberByVineId.get(vine.id)! }
       : vine
   );
+}
+
+/**
+ * Asigna números snake solo a vines numerables que todavía tienen number === null.
+ * Continúa la secuencia del Treatment desde el máximo existente + 1.
+ */
+export function assignAutoSnakeToUnnumbered(
+  vines: Vine[],
+  grids: Grid[],
+  treatmentId: string
+): Vine[] {
+  const orderedVines = getAllVinesInSnakeOrder(vines, grids);
+  const toNumber = orderedVines.filter(
+    (vine) => vine.treatmentId === treatmentId && vine.number === null
+  );
+
+  if (toNumber.length === 0) {
+    return vines;
+  }
+
+  let nextNumber = getMaxNumberForTreatment(vines, treatmentId) + 1;
+  const numberByVineId = new Map<string, number>();
+
+  toNumber.forEach((vine) => {
+    numberByVineId.set(vine.id, nextNumber++);
+  });
+
+  return vines.map((vine) =>
+    numberByVineId.has(vine.id)
+      ? { ...vine, number: numberByVineId.get(vine.id)! }
+      : vine
+  );
+}
+
+/**
+ * Auto-numera vines sin número para todos los Treatments presentes en el Layout.
+ */
+export function assignAutoSnakeToUnnumberedAllTreatments(
+  vines: Vine[],
+  grids: Grid[]
+): Vine[] {
+  const treatmentIds = [
+    ...new Set(
+      vines
+        .filter((vine) => vine.treatmentId !== null)
+        .map((vine) => vine.treatmentId as string)
+    ),
+  ];
+
+  return treatmentIds.reduce(
+    (current, treatmentId) =>
+      assignAutoSnakeToUnnumbered(current, grids, treatmentId),
+    vines
+  );
+}
+
+/**
+ * Descarta la numeración actual de un Treatment y recalcula desde 1 en orden snake.
+ */
+export function resetAndAssignAutoSnakeNumbering(
+  vines: Vine[],
+  grids: Grid[],
+  treatmentId: string
+): Vine[] {
+  const cleared = vines.map((vine) =>
+    vine.treatmentId === treatmentId ? { ...vine, number: null } : vine
+  );
+
+  return assignAutoSnakeNumbering(cleared, grids, treatmentId);
+}
+
+/**
+ * Reset completo: recalcula la numeración snake de todos los Treatments.
+ */
+export function resetAndAssignAutoSnakeAllTreatments(
+  vines: Vine[],
+  grids: Grid[]
+): Vine[] {
+  const treatmentIds = [
+    ...new Set(
+      vines
+        .filter((vine) => vine.treatmentId !== null)
+        .map((vine) => vine.treatmentId as string)
+    ),
+  ];
+
+  let result = vines.map((vine) =>
+    vine.treatmentId !== null ? { ...vine, number: null } : vine
+  );
+
+  for (const treatmentId of treatmentIds) {
+    result = assignAutoSnakeNumbering(result, grids, treatmentId);
+  }
+
+  return result;
+}
+
+export function getMaxNumberForTreatment(
+  vines: Vine[],
+  treatmentId: string
+): number {
+  return vines.reduce((max, vine) => {
+    if (vine.treatmentId !== treatmentId || vine.number === null) {
+      return max;
+    }
+    return Math.max(max, vine.number);
+  }, 0);
+}
+
+export function getNextNumberForTreatment(
+  vines: Vine[],
+  treatmentId: string
+): number {
+  return getMaxNumberForTreatment(vines, treatmentId) + 1;
+}
+
+export function findAllDuplicateVineIds(vines: Vine[]): Set<string> {
+  const treatmentIds = new Set(
+    vines
+      .filter((vine) => vine.treatmentId !== null)
+      .map((vine) => vine.treatmentId as string)
+  );
+
+  const duplicateIds = new Set<string>();
+  treatmentIds.forEach((treatmentId) => {
+    findDuplicateNumbersInTreatment(vines, treatmentId).forEach((id) =>
+      duplicateIds.add(id)
+    );
+  });
+
+  return duplicateIds;
+}
+
+export function findVineAtPoint(
+  vines: Vine[],
+  grids: Grid[],
+  point: { x: number; y: number }
+): Vine | null {
+  const gridById = new Map(grids.map((grid) => [grid.id, grid]));
+  const vinesByBayKey = new Map<string, Vine[]>();
+
+  vines.forEach((vine) => {
+    const key = `${vine.gridId}|${vine.rowNumber}|${vine.bayIndex}`;
+    vinesByBayKey.set(key, [...(vinesByBayKey.get(key) ?? []), vine]);
+  });
+
+  let closest: { vine: Vine; distance: number } | null = null;
+
+  for (const vine of vines) {
+    const grid = gridById.get(vine.gridId);
+    if (!grid) continue;
+
+    const bayKey = `${vine.gridId}|${vine.rowNumber}|${vine.bayIndex}`;
+    const vinesInSameBay = vinesByBayKey.get(bayKey) ?? [vine];
+    const pixel = bayToPixel(
+      grid,
+      vine.rowNumber,
+      vine.bayIndex,
+      vine.slot,
+      vinesInSameBay
+    );
+    const distance = Math.hypot(pixel.x - point.x, pixel.y - point.y);
+
+    if (
+      distance <= VINE_HIT_RADIUS &&
+      (!closest || distance < closest.distance)
+    ) {
+      closest = { vine, distance };
+    }
+  }
+
+  return closest?.vine ?? null;
+}
+
+export function layoutHasNumbering(vines: Vine[]): boolean {
+  return vines.some((vine) => vine.number !== null);
 }
 
 /**

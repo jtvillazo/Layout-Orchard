@@ -9,9 +9,10 @@ import {
   getLayoutData,
   ProjectData,
   updateLayoutTreatments,
+  updateLayoutVines,
 } from "@/lib/project-store";
 
-import { Grid, Treatment, UUID, Vine } from "@/types";
+import { EditTool, Grid, Treatment, UUID, Vine } from "@/types";
 
 function createId(): UUID {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -26,6 +27,7 @@ import {
   type ImportLayoutOption,
 } from "@/components/layout-editor/ImportTreatmentsModal";
 import { TreatmentsMenu } from "@/components/layout-editor/TreatmentsMenu";
+import { ToolsMenu } from "@/components/layout-editor/ToolsMenu";
 import { VineContextPopup } from "@/components/layout-editor/VineContextPopup";
 import { bayToPixel, computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
@@ -35,6 +37,14 @@ import {
   countVinesForTreatment,
   getLayoutTreatments,
 } from "@/lib/treatment-utils";
+import {
+  assignAutoSnakeToUnnumberedAllTreatments,
+  findAllDuplicateVineIds,
+  findVineAtPoint,
+  getNextNumberForTreatment,
+  layoutHasNumbering,
+  resetAndAssignAutoSnakeAllTreatments,
+} from "@/lib/numbering";
 
 export default function TestGridPage() {
   const searchParams = useSearchParams();
@@ -65,6 +75,7 @@ export default function TestGridPage() {
     count: number;
   } | null>(null);
   const [showImportTreatments, setShowImportTreatments] = useState(false);
+  const [activeTool, setActiveTool] = useState<EditTool>("none");
 
   const rowLabels: Record<number, string> = {};
 
@@ -82,10 +93,7 @@ export default function TestGridPage() {
       });
 
       setTreatments(data.treatments ?? []);
-
-      // Por ahora las vines empiezan vacías.
-      // Más adelante las cargaremos desde project-store.
-      setVines([]);
+      setVines(data.vines ?? []);
     }
   }, [layoutId]);
 
@@ -133,43 +141,55 @@ export default function TestGridPage() {
     setShowCreateGrid(false);
   }
 
-  function handleCreateVineAtBay(grid: Grid, rowNumber: number, bayIndex: number) {
-    setVines((current) => {
-      const vinesInBay = current.filter(
-        (vine) =>
-          vine.gridId === grid.id &&
-          vine.rowNumber === rowNumber &&
-          vine.bayIndex === bayIndex
+  function persistVines(updatedVines: Vine[]) {
+    if (!layoutId) {
+      return;
+    }
+
+    setVines(updatedVines);
+    const saved = updateLayoutVines(layoutId, updatedVines);
+    if (saved) {
+      setProjectData((current) =>
+        current ? { ...current, vines: updatedVines } : current
       );
+    }
+  }
 
-      const slot = getFirstAvailableSlot(vinesInBay);
-      if (slot === null) {
-        console.log("[LONG PRESS] Bay lleno", {
-          gridId: grid.id,
-          rowNumber,
-          bayIndex,
-        });
-        return current;
-      }
+  function handleCreateVineAtBay(grid: Grid, rowNumber: number, bayIndex: number) {
+    const vinesInBay = vines.filter(
+      (vine) =>
+        vine.gridId === grid.id &&
+        vine.rowNumber === rowNumber &&
+        vine.bayIndex === bayIndex
+    );
 
-      const newVine: Vine = {
-        id: createId(),
+    const slot = getFirstAvailableSlot(vinesInBay);
+    if (slot === null) {
+      console.log("[LONG PRESS] Bay lleno", {
         gridId: grid.id,
         rowNumber,
         bayIndex,
-        slot,
-        gender: "female",
-        treatmentId: null,
-        number: null,
-        layer: 2,
-      };
+      });
+      return;
+    }
 
-      return [...current, newVine];
-    });
+    const newVine: Vine = {
+      id: createId(),
+      gridId: grid.id,
+      rowNumber,
+      bayIndex,
+      slot,
+      gender: "female",
+      treatmentId: null,
+      number: null,
+      layer: 2,
+    };
+
+    persistVines([...vines, newVine]);
   }
 
   function handleDeleteVine(vineId: UUID) {
-    setVines((current) => current.filter((vine) => vine.id !== vineId));
+    persistVines(vines.filter((vine) => vine.id !== vineId));
     setSelectedVineId(null);
   }
 
@@ -179,16 +199,39 @@ export default function TestGridPage() {
   }
 
   function handleSaveVine(vineId: UUID, updates: VineEditableFields) {
-    setVines((current) =>
-      current.map((vine) =>
-        vine.id === vineId
+    const vine = vines.find((item) => item.id === vineId);
+    if (!vine) {
+      return;
+    }
+
+    const numberingUsed = layoutHasNumbering(vines);
+    let number = vine.number;
+
+    if (updates.treatmentId === null) {
+      number = null;
+    } else if (updates.treatmentId !== vine.treatmentId) {
+      number = numberingUsed
+        ? getNextNumberForTreatment(vines, updates.treatmentId)
+        : null;
+    } else if (
+      updates.treatmentId &&
+      vine.number === null &&
+      numberingUsed
+    ) {
+      number = getNextNumberForTreatment(vines, updates.treatmentId);
+    }
+
+    persistVines(
+      vines.map((item) =>
+        item.id === vineId
           ? {
-              ...vine,
+              ...item,
               gender: updates.gender,
               treatmentId: updates.treatmentId,
               comment: updates.comment,
+              number,
             }
-          : vine
+          : item
       )
     );
     setEditingVineId(null);
@@ -202,10 +245,59 @@ export default function TestGridPage() {
   }
 
   function handleSurfaceClick(target: Element | null) {
+    if (activeTool === "numbering") return;
     if (!selectedVineId) return;
     if (target?.closest("[data-vine-popup]")) return;
     if (target?.closest("[data-vine-id]")) return;
     setSelectedVineId(null);
+  }
+
+  function handleSelectTool(tool: EditTool) {
+    setSelectedVineId(null);
+    setActiveTool(tool);
+
+    if (tool === "numbering") {
+      persistVines(assignAutoSnakeToUnnumberedAllTreatments(vines, grids));
+    }
+  }
+
+  function handleNumberingTap(vine: Vine) {
+    if (!vine.treatmentId) {
+      return;
+    }
+
+    persistVines(
+      vines.map((item) =>
+        item.id === vine.id
+          ? { ...item, number: (item.number ?? 0) + 1 }
+          : item
+      )
+    );
+  }
+
+  function handleNumberingLongPress(vine: Vine) {
+    if (!vine.treatmentId) {
+      return;
+    }
+
+    persistVines(
+      vines.map((item) =>
+        item.id === vine.id ? { ...item, number: 1 } : item
+      )
+    );
+  }
+
+  function handleResetNumbering() {
+    persistVines(resetAndAssignAutoSnakeAllTreatments(vines, grids));
+  }
+
+  function handleVineClick(vine: Vine) {
+    if (activeTool === "numbering") {
+      handleNumberingTap(vine);
+      return;
+    }
+
+    setSelectedVineId(vine.id);
   }
 
   const grids = projectData?.grids ?? [];
@@ -215,6 +307,9 @@ export default function TestGridPage() {
   const layoutGridIds = new Set(grids.map((grid) => grid.id));
   const layoutVines = vines.filter((vine) => layoutGridIds.has(vine.gridId));
   const vineCountByTreatmentId = countVinesByTreatmentId(layoutVines);
+  const numberingModeActive = activeTool === "numbering";
+  const showNumberLabels = layoutHasNumbering(layoutVines);
+  const duplicateVineIds = findAllDuplicateVineIds(layoutVines);
   const importLayoutOptions: ImportLayoutOption[] = layoutId
     ? getAllProjects()
         .filter((project) => project.layout.id !== layoutId)
@@ -311,46 +406,33 @@ export default function TestGridPage() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Header */}
-      <div className="absolute left-4 top-4 z-50 rounded-xl bg-white p-4 shadow-md">
-        <p className="font-semibold">
-          {projectData?.project.name}
-        </p>
-
-        <p className="text-sm text-gray-500">
-          {projectData?.orchard.name}
-        </p>
-
-        <p className="text-sm text-gray-500">
-          {projectData?.blocks
-            .map((block) => block.name)
-            .join(", ")}
-        </p>
-
-        <button
-          type="button"
-          onClick={() => setShowCreateGrid(true)}
-          className="mt-3 rounded-lg bg-[#2f4034] px-4 py-2 text-sm font-medium text-white"
-        >
-          + Create Grid
-        </button>
-
-        {/* Botón temporal para probar Vine */}
-        {grids.length > 0 && (
-          <button
-            type="button"
-            onClick={() => handleCreateVineAtBay(grids[0], 1, 1)}
-            className="mt-2 block rounded-lg bg-[#66806b] px-4 py-2 text-sm font-medium text-white"
-          >
-            + Test Vine
-          </button>
-        )}
-
-        {/* Contador temporal */}
-        {vines.length > 0 && (
-          <p className="mt-2 text-xs text-gray-500">
-            Vines: {vines.length}
+      <div className="absolute left-4 top-4 z-50 flex flex-col gap-3">
+        <div className="rounded-xl bg-white p-4 shadow-md">
+          <p className="text-sm text-gray-800">
+            <span className="font-medium text-gray-500">Leader</span>
+            <br />
+            {projectData?.project.projectLeader}
           </p>
+
+          <p className="mt-3 text-sm text-gray-800">
+            <span className="font-medium text-gray-500">Project</span>
+            <br />
+            <span className="font-semibold">{projectData?.project.name}</span>
+          </p>
+
+          <p className="mt-3 text-sm text-gray-800">
+            <span className="font-medium text-gray-500">Orchard</span>
+            <br />
+            {projectData?.orchard.name}
+          </p>
+        </div>
+
+        {layoutId && (
+          <ToolsMenu
+            activeTool={activeTool}
+            onSelectTool={handleSelectTool}
+            onCreateGrid={() => setShowCreateGrid(true)}
+          />
         )}
       </div>
 
@@ -381,11 +463,46 @@ export default function TestGridPage() {
         />
       )}
 
+      {numberingModeActive && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[2] bg-[#66806b]/10"
+          aria-hidden="true"
+        />
+      )}
+
+      {numberingModeActive && (
+        <div className="absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-[#66806b]/30 bg-white/95 px-4 py-2 shadow-md">
+          <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-[#2f4034]">
+            Numbering Mode
+          </p>
+        </div>
+      )}
+
+      {numberingModeActive && (
+        <div className="absolute bottom-24 left-1/2 z-50 flex -translate-x-1/2 gap-3">
+          <button
+            type="button"
+            onClick={handleResetNumbering}
+            className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 shadow-sm"
+          >
+            Reset numbers to default
+          </button>
+        </div>
+      )}
+
       {/* Canvas */}
       <Canvas
         onSurfaceClick={handleSurfaceClick}
         onLongPress={(_clientX, _clientY, point) => {
           if (!point || grids.length === 0) {
+            return;
+          }
+
+          if (numberingModeActive) {
+            const hitVine = findVineAtPoint(layoutVines, grids, point);
+            if (hitVine) {
+              handleNumberingLongPress(hitVine);
+            }
             return;
           }
 
@@ -403,12 +520,13 @@ export default function TestGridPage() {
             <GridView
               key={grid.id}
               grid={grid}
-              vines={vines.filter(
-                (vine) => vine.gridId === grid.id
-              )}
+              vines={vines.filter((vine) => vine.gridId === grid.id)}
               treatments={treatments}
               rowLabels={rowLabels}
-              onVineClick={(vine) => setSelectedVineId(vine.id)}
+              numberingMode={numberingModeActive}
+              showNumberLabels={showNumberLabels}
+              duplicateVineIds={duplicateVineIds}
+              onVineClick={handleVineClick}
             />
           ))
         ) : (
@@ -444,7 +562,7 @@ export default function TestGridPage() {
             </text>
           </g>
         )}
-        {selectedVine && selectedVineAnchor && (
+        {selectedVine && selectedVineAnchor && !numberingModeActive && (
           <VineContextPopup
             anchorX={selectedVineAnchor.x}
             anchorY={selectedVineAnchor.y}

@@ -1,4 +1,4 @@
-import { Block, Grid, Layout, Orchard, Project, Treatment, UUID } from "@/types";
+import { Block, Grid, Layout, Orchard, Project, Treatment, UUID, Vine } from "@/types";
 
 export interface ProjectData {
   project: Project;
@@ -7,6 +7,7 @@ export interface ProjectData {
   layout: Layout;
   grids: Grid[];
   treatments?: Treatment[];
+  vines?: Vine[];
 }
 
 const STORAGE_KEY = "layout-orchard-projects";
@@ -95,6 +96,24 @@ export function updateLayoutTreatments(
   }
 
   projectData.treatments = treatments;
+
+  saveProjects(projects);
+
+  return projectData;
+}
+
+export function updateLayoutVines(layoutId: UUID, vines: Vine[]) {
+  const projects = readProjects();
+
+  const projectData = projects.find(
+    (item) => item.layout.id === layoutId
+  );
+
+  if (!projectData) {
+    return null;
+  }
+
+  projectData.vines = vines;
 
   saveProjects(projects);
 
