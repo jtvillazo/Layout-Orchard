@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 
 import {
   addGridToLayout,
+  getAllProjects,
   getLayoutData,
   ProjectData,
+  updateLayoutTreatments,
 } from "@/lib/project-store";
 
 import { Grid, Treatment, UUID, Vine } from "@/types";
@@ -19,11 +21,16 @@ import { Canvas } from "@/components/layout-editor/Canvas";
 import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
 import { GridView } from "@/components/layout-editor/GridView";
 import { TreatmentModal } from "@/components/layout-editor/TreatmentModal";
+import {
+  ImportTreatmentsModal,
+  type ImportLayoutOption,
+} from "@/components/layout-editor/ImportTreatmentsModal";
 import { TreatmentsMenu } from "@/components/layout-editor/TreatmentsMenu";
 import { VineContextPopup } from "@/components/layout-editor/VineContextPopup";
 import { bayToPixel, computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
 import {
+  cloneTreatmentsForLayout,
   countVinesByTreatmentId,
   countVinesForTreatment,
   getLayoutTreatments,
@@ -57,6 +64,7 @@ export default function TestGridPage() {
     treatmentName: string;
     count: number;
   } | null>(null);
+  const [showImportTreatments, setShowImportTreatments] = useState(false);
 
   const rowLabels: Record<number, string> = {};
 
@@ -72,6 +80,8 @@ export default function TestGridPage() {
         ...data,
         grids: data.grids ?? [],
       });
+
+      setTreatments(data.treatments ?? []);
 
       // Por ahora las vines empiezan vacías.
       // Más adelante las cargaremos desde project-store.
@@ -184,41 +194,6 @@ export default function TestGridPage() {
     setEditingVineId(null);
   }
 
-  function handleAddTreatment(treatment: Treatment) {
-    setTreatments((current) => [...current, treatment]);
-  }
-
-  function handleSaveTreatment(treatment: Treatment) {
-    setTreatments((current) => {
-      const exists = current.some((item) => item.id === treatment.id);
-      if (exists) {
-        return current.map((item) =>
-          item.id === treatment.id ? treatment : item
-        );
-      }
-      return [...current, treatment];
-    });
-    setTreatmentModalState(null);
-  }
-
-  function handleDeleteTreatment(treatment: Treatment) {
-    const count = countVinesForTreatment(layoutVines, treatment.id);
-    if (count > 0) {
-      setDeleteTreatmentWarning({
-        treatmentName: treatment.name,
-        count,
-      });
-      setSelectedTreatmentMenuId(null);
-      return;
-    }
-
-    setTreatments((current) =>
-      current.filter((item) => item.id !== treatment.id)
-    );
-    setSelectedTreatmentMenuId(null);
-    setDeleteTreatmentWarning(null);
-  }
-
   function handleToggleSelectTreatment(treatmentId: UUID) {
     setSelectedTreatmentMenuId((current) =>
       current === treatmentId ? null : treatmentId
@@ -240,6 +215,79 @@ export default function TestGridPage() {
   const layoutGridIds = new Set(grids.map((grid) => grid.id));
   const layoutVines = vines.filter((vine) => layoutGridIds.has(vine.gridId));
   const vineCountByTreatmentId = countVinesByTreatmentId(layoutVines);
+  const importLayoutOptions: ImportLayoutOption[] = layoutId
+    ? getAllProjects()
+        .filter((project) => project.layout.id !== layoutId)
+        .map((project) => ({
+          layoutId: project.layout.id,
+          label: project.orchard.name,
+          treatments: project.treatments ?? [],
+        }))
+    : [];
+
+  function persistTreatments(updatedTreatments: Treatment[]) {
+    if (!layoutId) {
+      return;
+    }
+
+    setTreatments(updatedTreatments);
+    const saved = updateLayoutTreatments(layoutId, updatedTreatments);
+    if (saved) {
+      setProjectData((current) =>
+        current ? { ...current, treatments: updatedTreatments } : current
+      );
+    }
+  }
+
+  function handleAddTreatment(treatment: Treatment) {
+    persistTreatments([...layoutTreatments, treatment]);
+  }
+
+  function handleSaveTreatment(treatment: Treatment) {
+    const exists = layoutTreatments.some((item) => item.id === treatment.id);
+    const updatedTreatments = exists
+      ? layoutTreatments.map((item) =>
+          item.id === treatment.id ? treatment : item
+        )
+      : [...layoutTreatments, treatment];
+
+    persistTreatments(updatedTreatments);
+    setTreatmentModalState(null);
+  }
+
+  function handleDeleteTreatment(treatment: Treatment) {
+    const count = countVinesForTreatment(layoutVines, treatment.id);
+    if (count > 0) {
+      setDeleteTreatmentWarning({
+        treatmentName: treatment.name,
+        count,
+      });
+      setSelectedTreatmentMenuId(null);
+      return;
+    }
+
+    persistTreatments(
+      layoutTreatments.filter((item) => item.id !== treatment.id)
+    );
+    setSelectedTreatmentMenuId(null);
+    setDeleteTreatmentWarning(null);
+  }
+
+  function handleImportTreatments(sourceTreatments: Treatment[]) {
+    if (!layoutId || sourceTreatments.length === 0) {
+      return;
+    }
+
+    const imported = cloneTreatmentsForLayout(
+      sourceTreatments,
+      layoutId,
+      createId
+    );
+    persistTreatments([...layoutTreatments, ...imported]);
+    setShowImportTreatments(false);
+    setSelectedTreatmentMenuId(null);
+    setDeleteTreatmentWarning(null);
+  }
   const editingVine = vines.find((vine) => vine.id === editingVineId) ?? null;
   const selectedVine = vines.find((vine) => vine.id === selectedVineId) ?? null;
   const selectedVineGrid = selectedVine
@@ -324,6 +372,11 @@ export default function TestGridPage() {
             setSelectedTreatmentMenuId(null);
             setDeleteTreatmentWarning(null);
             setTreatmentModalState({ mode: "create" });
+          }}
+          onImportTreatments={() => {
+            setSelectedTreatmentMenuId(null);
+            setDeleteTreatmentWarning(null);
+            setShowImportTreatments(true);
           }}
         />
       )}
@@ -425,6 +478,14 @@ export default function TestGridPage() {
           createId={createId}
           onCancel={() => setTreatmentModalState(null)}
           onSave={handleSaveTreatment}
+        />
+      )}
+
+      {showImportTreatments && layoutId && (
+        <ImportTreatmentsModal
+          layoutOptions={importLayoutOptions}
+          onCancel={() => setShowImportTreatments(false)}
+          onImport={handleImportTreatments}
         />
       )}
 

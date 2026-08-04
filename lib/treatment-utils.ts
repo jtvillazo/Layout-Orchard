@@ -19,3 +19,28 @@ export function countVinesByTreatmentId(vines: Vine[]): Record<UUID, number> {
 export function countVinesForTreatment(vines: Vine[], treatmentId: UUID): number {
   return vines.filter((vine) => vine.treatmentId === treatmentId).length;
 }
+
+export function cloneTreatmentForLayout(
+  source: Treatment,
+  targetLayoutId: UUID,
+  createId: () => UUID
+): Treatment {
+  return {
+    id: createId(),
+    layoutId: targetLayoutId,
+    name: source.name,
+    labelName: source.labelName,
+    color: source.color,
+    ...(source.comment ? { comment: source.comment } : {}),
+  };
+}
+
+export function cloneTreatmentsForLayout(
+  sources: Treatment[],
+  targetLayoutId: UUID,
+  createId: () => UUID
+): Treatment[] {
+  return sources.map((source) =>
+    cloneTreatmentForLayout(source, targetLayoutId, createId)
+  );
+}

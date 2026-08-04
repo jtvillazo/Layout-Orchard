@@ -85,6 +85,7 @@ const layoutId = createId();
       blocks: blockObjects,
       layout,
       grids: [],
+      treatments: [],
     });
   
     console.log("Created project:", {

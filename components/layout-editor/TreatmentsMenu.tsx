@@ -15,6 +15,7 @@ interface TreatmentsMenuProps {
   onEditTreatment: (treatment: Treatment) => void;
   onDeleteTreatment: (treatment: Treatment) => void;
   onCreateTreatment: () => void;
+  onImportTreatments: () => void;
 }
 
 function TreatmentContextPopup({
@@ -65,14 +66,9 @@ export function TreatmentsMenu({
   onEditTreatment,
   onDeleteTreatment,
   onCreateTreatment,
+  onImportTreatments,
 }: TreatmentsMenuProps) {
   const [expanded, setExpanded] = useState(false);
-
-useEffect(() => {
-  console.log("EXPANDED CHANGED:", expanded);
-}, [expanded]);
-
-  console.log("TreatmentsMenu render", { expanded });
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -98,14 +94,11 @@ useEffect(() => {
     <div
       ref={menuRef}
       data-treatment-menu="true"
-      className="absolute right-4 top-32 z-40 w-44 rounded-xl border border-gray-200 bg-white shadow-md"
+      className="absolute right-4 top-32 z-40 w-52 rounded-xl border border-gray-200 bg-white shadow-md"
     >
       <button
         type="button"
-        onClick={() => {
-          console.trace("TREATMENTS HEADER CLICK");
-          setExpanded((current) => !current);
-        }}
+        onClick={() => setExpanded((current) => !current)}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <span className="text-sm font-semibold text-gray-800">Treatments</span>
@@ -150,8 +143,7 @@ useEffect(() => {
                       data-treatment-id={treatment.id}
                       onClick={(event) => {
                         event.stopPropagation();
-                        console.log("TREATMENT CLICK", treatment.id);
-onToggleSelectTreatment(treatment.id);
+                        onToggleSelectTreatment(treatment.id);
                       }}
                       className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-50 ${
                         isSelected ? "bg-[#f3f7f4]" : ""
@@ -188,6 +180,14 @@ onToggleSelectTreatment(treatment.id);
             className="mt-2 w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-[#2f4034] hover:bg-gray-50"
           >
             + Create new Treatment
+          </button>
+
+          <button
+            type="button"
+            onClick={onImportTreatments}
+            className="mt-1 w-full rounded-lg px-2 py-2 text-left text-sm font-medium text-[#2f4034] hover:bg-gray-50"
+          >
+            Import from another Layout
           </button>
         </div>
       )}
