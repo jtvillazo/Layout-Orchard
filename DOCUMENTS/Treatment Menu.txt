@@ -1,0 +1,317 @@
+Implement the Treatments menu for the current layout.
+
+## Goal
+
+Create a floating **Treatments** menu positioned at the **top-left of the layout/grid area**.
+
+The menu must manage the Treatments belonging to the current Layout.
+
+We already have:
+
+* `Treatment` type
+* `TreatmentModal` for creating a Treatment
+* `EditVineModal`, where Treatments can already be selected
+* `Vine.treatmentId`
+* `Vine` data available for the current Layout
+
+Do NOT create a second Treatment creation modal. Reuse the existing `TreatmentModal` and extend/reuse it for editing when necessary.
+
+---
+
+## 1. Collapsed menu
+
+Initially, the menu should be compact:
+
+```text
+┌──────────────────────────┐
+│ Treatments           ▼   │
+└──────────────────────────┘
+```
+
+It should float above the layout in the top-left area.
+
+Clicking the header expands/collapses the menu.
+
+---
+
+## 2. Expanded menu
+
+When expanded, display every Treatment belonging to the current Layout.
+
+Example:
+
+```text
+┌──────────────────────────────┐
+│ Treatments               ▲   │
+├──────────────────────────────┤
+│ Treatment A (12)             │
+│ Treatment B (0)              │
+│ Treatment C (7)              │
+│                              │
+│ + Create new Treatment       │
+└──────────────────────────────┘
+```
+
+The number in parentheses represents the number of Vines in the current Layout that currently use that Treatment.
+
+Examples:
+
+```text
+Treatment A (12)
+Treatment B (0)
+Treatment C (7)
+```
+
+If a Treatment has no Vines yet, it must still appear and show:
+
+```text
+Treatment B (0)
+```
+
+Do NOT hide Treatments with zero Vines.
+
+---
+
+## 3. Counting Vines
+
+The count must be calculated from the Vines belonging to the current Layout.
+
+A Vine belongs to a Treatment when:
+
+```ts
+vine.treatmentId === treatment.id
+```
+
+Only Vines in the current Layout should contribute to the count.
+
+Do not count Vines from another Layout.
+
+The count should update automatically when:
+
+* a Vine is created;
+* a Vine changes Treatment;
+* a Vine is deleted;
+* a Treatment is assigned to a Vine;
+* a Treatment is removed from a Vine.
+
+Example:
+
+Before:
+
+```text
+Treatment A (3)
+```
+
+A Vine is changed to Treatment A:
+
+```text
+Treatment A (4)
+```
+
+---
+
+## 4. Treatment interaction
+
+Treat each Treatment item similarly to how Vines currently behave.
+
+A normal click on a Treatment should open a small popup/context menu associated with that Treatment.
+
+Example:
+
+```text
+Treatment A (12)
+       ↓
+┌─────────────────┐
+│ Edit            │
+├─────────────────┤
+│ Delete          │
+└─────────────────┘
+```
+
+The popup should provide:
+
+* Edit
+* Delete
+
+It should visually match the existing Vine popup as much as practical.
+
+---
+
+## 5. Edit Treatment
+
+When the user selects:
+
+```text
+Edit
+```
+
+open the existing `TreatmentModal`, but in **edit mode**.
+
+The modal should be populated with the Treatment's existing values:
+
+* Name
+* Label name
+* Color
+* Comment
+
+Saving should update the existing Treatment rather than create a new Treatment.
+
+Do NOT create a separate unrelated edit modal if the existing `TreatmentModal` can be reused cleanly.
+
+The modal should support both:
+
+```text
+Create mode
+Edit mode
+```
+
+without breaking the current functionality used by `EditVineModal`.
+
+---
+
+## 6. Create new Treatment
+
+At the bottom of the expanded list, display:
+
+```text
++ Create new Treatment
+```
+
+Clicking this should open the existing `TreatmentModal` in create mode.
+
+After saving:
+
+1. Add the Treatment to the current Layout.
+2. Close the modal.
+3. Keep the Treatments menu open.
+4. The new Treatment should immediately appear in the list.
+5. Its Vine count should initially be:
+
+```text
+(0)
+```
+
+---
+
+## 7. Delete Treatment
+
+When the user chooses Delete, check whether the Treatment is currently assigned to any Vines.
+
+### If count is 0
+
+Allow deletion.
+
+Example:
+
+```text
+Treatment A (0)
+```
+
+Delete → Treatment is removed.
+
+### If count > 0
+
+Do NOT delete the Treatment.
+
+Instead, show a clear warning to the user explaining that the Treatment is currently assigned to Vines and must be removed from those Vines before the Treatment can be deleted.
+
+Example:
+
+```text
+This treatment is assigned to 12 vines.
+Remove the treatment from those vines before deleting it.
+```
+
+The important rule is:
+
+**Never leave Vines pointing to a Treatment that no longer exists.**
+
+---
+
+## 8. Layout scope
+
+Treatments belong to the current Layout.
+
+The menu should only show:
+
+```text
+treatment.layoutId === currentLayout.id
+```
+
+Do not show Treatments from another Layout.
+
+This is important because later we want to support importing/copying Treatments between different Layouts, but that is NOT part of this implementation yet.
+
+---
+
+## 9. Visual requirements
+
+The menu should:
+
+* float above the layout;
+* be positioned at the top-left;
+* not interfere with interacting with the Grid;
+* have a clean compact appearance;
+* be collapsible;
+* remain readable on desktop and touch devices;
+* use the existing visual language of the application;
+* not cover more of the Grid than necessary.
+
+The Treatment name should be clearly visible.
+
+If practical, display the Treatment color as a small visual indicator next to the Treatment name.
+
+For example:
+
+```text
+🟢 Treatment A (12)
+🔵 Treatment B (0)
+🟡 Treatment C (7)
+```
+
+Use the actual Treatment color rather than emoji if implementing a visual color indicator.
+
+---
+
+## 10. Important architecture constraints
+
+Do not modify the existing Vine geometry or placement logic.
+
+Do not modify:
+
+* `bayToPixel`
+* `pixelToBay`
+* row geometry
+* bay geometry
+* slot logic
+* long press creation
+* Vine popup behavior
+* Numbering logic
+
+Numbering is intentionally NOT part of this task.
+
+The `Vine.number` field must remain untouched and will be handled later by the dedicated **Numbering Mode**.
+
+---
+
+## 11. Expected final behavior
+
+The user should be able to:
+
+1. Open the Layout.
+2. See a collapsed `Treatments` menu at the top-left.
+3. Expand it.
+4. See all Treatments belonging to the current Layout.
+5. See the number of Vines assigned to each Treatment.
+6. See `(0)` for Treatments with no Vines.
+7. Click a Treatment.
+8. See Edit / Delete popup.
+9. Edit it using the existing Treatment modal.
+10. Delete it if it has zero Vines.
+11. Be prevented from deleting it if Vines still use it.
+12. Click `Create new Treatment`.
+13. Create a new Treatment using the existing modal.
+14. See the new Treatment immediately appear with `(0)`.
+15. Have Vine counts update automatically as Vines are created, edited, or deleted.
+
+Please inspect the existing project structure and reuse existing state management/components where possible instead of creating duplicate data flows.

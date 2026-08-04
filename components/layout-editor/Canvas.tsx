@@ -548,6 +548,23 @@ export function Canvas({
     [forwardClick]
   );
 
+  const handlePointerLeave = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
+    if (!activeTouches.current.has(e.pointerId)) return;
+
+    cancelLongPress("pointer leave", longPressTriggered.current);
+
+    activeTouches.current.delete(e.pointerId);
+    isMouseDragging.current = false;
+    rotateWithPointer.current = false;
+    gestureMoved.current = false;
+    longPressTriggered.current = false;
+
+    if (overlayRef.current?.hasPointerCapture(e.pointerId)) {
+      overlayRef.current.releasePointerCapture(e.pointerId);
+    }
+  }, []);
+
   const handleWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       e.preventDefault();
@@ -609,7 +626,7 @@ export function Canvas({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
         onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
         onContextMenu={(e) => e.preventDefault()}

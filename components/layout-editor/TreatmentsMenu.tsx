@@ -67,6 +67,13 @@ export function TreatmentsMenu({
   onCreateTreatment,
 }: TreatmentsMenuProps) {
   const [expanded, setExpanded] = useState(false);
+
+useEffect(() => {
+  console.log("EXPANDED CHANGED:", expanded);
+}, [expanded]);
+
+  console.log("TreatmentsMenu render", { expanded });
+
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,11 +98,14 @@ export function TreatmentsMenu({
     <div
       ref={menuRef}
       data-treatment-menu="true"
-      className="absolute left-4 top-52 z-40 w-64 rounded-xl border border-gray-200 bg-white shadow-md"
+      className="absolute right-4 top-32 z-40 w-44 rounded-xl border border-gray-200 bg-white shadow-md"
     >
       <button
         type="button"
-        onClick={() => setExpanded((current) => !current)}
+        onClick={() => {
+          console.trace("TREATMENTS HEADER CLICK");
+          setExpanded((current) => !current);
+        }}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <span className="text-sm font-semibold text-gray-800">Treatments</span>
@@ -140,7 +150,8 @@ export function TreatmentsMenu({
                       data-treatment-id={treatment.id}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onToggleSelectTreatment(treatment.id);
+                        console.log("TREATMENT CLICK", treatment.id);
+onToggleSelectTreatment(treatment.id);
                       }}
                       className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-gray-50 ${
                         isSelected ? "bg-[#f3f7f4]" : ""
