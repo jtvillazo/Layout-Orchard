@@ -169,6 +169,13 @@ export async function putAll<T extends { id: string }>(
   await Promise.all(records.map((record) => requestToPromise(store.put(record))));
 }
 
+export async function deleteById(
+  store: IDBObjectStore,
+  id: string
+): Promise<void> {
+  await requestToPromise(store.delete(id));
+}
+
 export async function replaceByIndex<T extends { id: string }>(
   store: IDBObjectStore,
   indexName: string,

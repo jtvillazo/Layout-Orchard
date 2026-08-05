@@ -1,5 +1,6 @@
 import {
   deleteAllByIndex,
+  deleteById,
   getAllByIndex,
   getById,
   getStore,
@@ -442,5 +443,54 @@ export async function updateLayoutRows(
 
     await replaceRowsForLayout(transaction, layoutId, rows);
     return finalizeLayoutWrite(transaction, layoutId);
+  });
+}
+
+/**
+ * Deletes a layout and all entities belonging to its ProjectData bundle.
+ * Current model: 1 project + 1 orchard + 1 layout per record.
+ */
+export async function deleteLayout(layoutId: UUID): Promise<boolean> {
+  return runTransaction(ALL_STORES, "readwrite", async (transaction) => {
+    const layoutsStore = getStore(transaction, STORES.layouts);
+    const layout = await getById<Layout>(layoutsStore, layoutId);
+
+    if (!layout) {
+      return false;
+    }
+
+    const gridsStore = getStore(transaction, STORES.grids);
+    const vinesStore = getStore(transaction, STORES.vines);
+    const rowsStore = getStore(transaction, STORES.rows);
+    const treatmentsStore = getStore(transaction, STORES.treatments);
+    const mapObjectsStore = getStore(transaction, STORES.mapObjects);
+    const mapTextsStore = getStore(transaction, STORES.mapTexts);
+    const blocksStore = getStore(transaction, STORES.blocks);
+    const projectsStore = getStore(transaction, STORES.projects);
+    const orchardsStore = getStore(transaction, STORES.orchards);
+
+    const grids = await getGridsForLayout(gridsStore, layoutId);
+
+    await Promise.all(
+      grids.map(async (grid) => {
+        await deleteAllByIndex(vinesStore, "gridId", grid.id);
+        await deleteAllByIndex(rowsStore, "gridId", grid.id);
+        await deleteById(gridsStore, grid.id);
+      })
+    );
+
+    await deleteAllByIndex(treatmentsStore, "layoutId", layoutId);
+    await deleteAllByIndex(mapObjectsStore, "layoutId", layoutId);
+    await deleteAllByIndex(mapTextsStore, "layoutId", layoutId);
+
+    await Promise.all(
+      layout.blockIds.map((blockId) => deleteById(blocksStore, blockId))
+    );
+
+    await deleteById(layoutsStore, layoutId);
+    await deleteById(projectsStore, layout.projectId);
+    await deleteById(orchardsStore, layout.orchardId);
+
+    return true;
   });
 }

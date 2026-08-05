@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { getLayoutEditorPath } from "@/lib/layout-list-utils";
-import { getAllProjects } from "@/lib/project-store";
+import { deleteLayout, getAllProjects } from "@/lib/project-store";
 import type { ProjectData } from "@/lib/storage/project-data";
 
 import { AppHeader } from "@/components/app/AppHeader";
@@ -55,6 +55,21 @@ export function HomeClient() {
   function openLayout(layoutId: string) {
     setModalMode(null);
     router.push(getLayoutEditorPath(layoutId));
+  }
+
+  async function handleDeleteLayout(layoutId: string): Promise<boolean> {
+    try {
+      const deleted = await deleteLayout(layoutId);
+      if (deleted) {
+        setLayouts((current) =>
+          current.filter((layout) => layout.layout.id !== layoutId)
+        );
+      }
+      return deleted;
+    } catch (error) {
+      console.error("[home] Failed to delete layout", error);
+      return false;
+    }
   }
 
   const modalTitle =
@@ -120,6 +135,7 @@ export function HomeClient() {
           layouts={layouts}
           onClose={() => setModalMode(null)}
           onOpenLayout={openLayout}
+          onDeleteLayout={handleDeleteLayout}
         />
       )}
     </main>
