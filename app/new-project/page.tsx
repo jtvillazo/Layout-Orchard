@@ -1,13 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { createId } from "@/lib/create-id";
 import { createProjectData } from "@/lib/project-store";
 import { Block, Layout, Orchard, Project, UUID } from "@/types";
 import { FormEvent, useRef, useState } from "react";
-
-function createId(): UUID {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
 
 export default function NewProjectPage() {
  const router = useRouter();
@@ -40,7 +37,7 @@ export default function NewProjectPage() {
     );
   }
 
-  function createProject() {
+  async function createProject() {
     const orchardId = createId();
     const projectId = createId();
     const layoutId = createId();
@@ -78,7 +75,7 @@ export default function NewProjectPage() {
       lastEditedAt: new Date().toISOString(),
     };
 
-    createProjectData({
+    await createProjectData({
       project,
       orchard,
       blocks: blockObjects,
@@ -94,22 +91,22 @@ export default function NewProjectPage() {
     router.push(`/test-grid?layoutId=${layoutId}`);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!event.currentTarget.reportValidity()) {
       return;
     }
 
-    createProject();
+    await createProject();
   }
 
-  function handleCreateClick() {
+  async function handleCreateClick() {
     if (!formRef.current?.reportValidity()) {
       return;
     }
 
-    createProject();
+    await createProject();
   }
 
   return (

@@ -1,0 +1,747 @@
+Realizando una auditoría completa del código sin modificar archivos.
+
+Offline-First Architecture Audit
+Analysis-only. No files were modified. Types live in types/index.ts (there is no src/types).
+
+1. Current Architecture
+Routes / pages
+Route	Role
+/ (app/page.tsx)
+Marketing/home. Static “Recent layouts” cards — not wired to persistence.
+/new-project (app/new-project/page.tsx)
+Creates a full ProjectData blob and redirects to the editor.
+/test-grid?layoutId=… (app/test-grid/page.tsx → TestGridClient.tsx)
+Main layout editor — all CRUD for grids, vines, treatments, objects, texts, row numbers.
+No API routes, no server actions, no middleware. The app is 100% client-side after hydration.
+
+Component layers
+TestGridClient (orchestrator ~1,350 lines)
+├── Canvas (pan/zoom/rotate, gestures, overlay)
+│   ├── DotBackground
+│   ├── GridView (rows, vines, row-number handles)
+│   ├── MapObjectView
+│   └── MapTextView
+├── ScreenContextPopup (HTML overlay, zoom-independent)
+├── ToolsMenu, TreatmentsMenu
+├── Modals: EditVine/Object/Text/RowNumber, Treatment, ImportTreatments
+└── Create-grid form (inline)
+Unused / legacy: hooks/useLayoutEditor.ts (editor state hook — not used), VineContextPopup, LayoutElementContextPopup, CameraGroup (Konva), CanvasLayers. Editor state is duplicated inline in TestGridClient.
+
+Canvas architecture
+Canvas.tsx: SVG content layer (pointer-events: none on SVG) + transparent HTML overlay captures all pointer events.
+Hit-testing via elementFromPoint with overlay temporarily disabled.
+forwardClick → onSurfaceClick + synthetic click on SVG targets (vines, row handles, objects, texts).
+Long-press, drag, pinch-zoom, rotation handled in Canvas; business logic passed via callbacks from TestGridClient.
+CanvasUiContext: contentToContainer(), getContentUiScale() for screen-space UI (popups, zoom-independent labels).
+State management
+There is no global store (no Redux, Zustand, React Query, etc.). Everything is local React state in TestGridClient.
+
+Persisted entities split into parallel state slices on load:
+
+React state	Source field	Persist function
+projectData
+Whole blob; grids read from here
+Partial updates on some persists
+vines
+ProjectData.vines
+persistVines → updateLayoutVines
+treatments
+ProjectData.treatments
+persistTreatments → updateLayoutTreatments
+mapObjects
+ProjectData.mapObjects
+persistMapObjects
+mapTexts
+ProjectData.mapTexts
+persistMapTexts
+layoutRows
+ProjectData.rows
+persistRows → updateLayoutRows
+UI-only state (not persisted): activeTool, selection IDs, modal states, showCreateGrid, form fields, drag refs, layoutLoadState.
+
+Derived at render time (not stored):
+
+layoutTreatments, layoutVines, layoutGridIds
+vineCountByTreatmentId, showNumberLabels, duplicateVineIds
+getGridRowDisplayNumbers(gridId, layoutRows)
+selectedVineAnchor (via bayToPixel)
+Numbering snake order (lib/numbering.ts)
+ensureLayoutRows() on load (may synthesize missing Row records in memory)
+Data flow (actual)
+new-project/page
+  → createProjectData({ project, orchard, blocks, layout, grids:[], … })
+  → localStorage
+  → router → /test-grid?layoutId=
+TestGridClient mount
+  → getLayoutData(layoutId)
+  → split into 6 React state slices
+  → user edits
+  → persist*() → read full array from localStorage → mutate one field → write full array
+  → setState + patch projectData
+Who touches persistence
+Only two files import @/lib/project-store:
+
+app/new-project/page.tsx — createProjectData
+app/test-grid/TestGridClient.tsx — all read/write functions
+No component other than these pages calls localStorage directly.
+
+Component dependencies
+GridView: Presentational. Receives grid, filtered vines, treatments, rowDisplayNumbers, callbacks. No persistence.
+Canvas: Generic gesture surface. No domain knowledge.
+Menus / modals: Controlled by TestGridClient props/callbacks.
+TestGridClient: Depends on everything — persistence, geometry, numbering, normalization, UI.
+2. Current Data Model
+Types are in types/index.ts. Persistence shape is ProjectData in lib/project-store.ts:
+
+interface ProjectData {
+  project: Project;
+  orchard: Orchard;
+  blocks: Block[];
+  layout: Layout;
+  grids: Grid[];
+  treatments?: Treatment[];
+  vines?: Vine[];
+  mapObjects?: MapObject[];
+  mapTexts?: MapText[];
+  rows?: Row[];
+}
+This is a single nested document per project, not normalized tables.
+
+Entity relationships (as implemented)
+Project (1) ──embedded──► Orchard (1)     [not shared across projects today]
+Project (1) ──embedded──► Layout (1)      [comment: 1 layout per project]
+Layout (1) ──blockIds[]──► Block (N)      [blocks also embedded in ProjectData]
+Layout (1) ──orchardId──► Orchard        [redundant copy of embedded orchard.id]
+Layout (1) ──grids[]──► Grid (N)
+Grid (1) ──blockId──► Block
+Grid (1) ──layoutId──► Layout
+Layout (1) ──vines[]──► Vine (N)         [stored flat; Vine.gridId → Grid]
+Vine (N) ──treatmentId?──► Treatment
+Layout (1) ──treatments[]──► Treatment (N)   [Treatment.layoutId → Layout]
+Layout (1) ──mapObjects[]──► MapObject (N)
+Layout (1) ──mapTexts[]──► MapText (N)
+Layout (1) ──rows[]──► Row (N)               [Row.gridId → Grid; Row.index ≡ vine.rowNumber]
+Row.displayNumber ≠ vine.rowNumber ≠ Row.index semantics:
+  - Row.index / vine.rowNumber = physical column in grid (1…grid.rows)
+  - Row.displayNumber = optional visual label ("Row X"), independent of numbering
+  - vine.number = treatment numbering (separate system)
+Field reference
+Entity	PK	Required FKs	Optional / notable
+Project
+id
+—
+createdAt, createdBy
+Orchard
+id
+—
+location?, address?
+Block
+id
+orchardId
+—
+Layout
+id
+projectId, orchardId
+blockIds[], status, lastEditedBy, lastEditedAt
+Grid
+id
+layoutId, blockId
+cells[] (always [] today), position, rotation, order, rows, bayColumns, layer: 1
+Vine
+id
+gridId
+treatmentId?, number?, slotPosition?, comment?, layer
+Treatment
+id
+layoutId
+comment?
+MapObject
+id
+layoutId
+comment?
+MapText
+id
+layoutId
+comment?
+Row
+id
+gridId
+displayNumber?, deprecated label?
+Derived / not persisted
+Vine slot assignment logic (getFirstAvailableSlot)
+Auto snake numbering (lib/numbering.ts)
+Grid positions for new grids (computeNextGridPosition)
+ensureLayoutRows() synthetic rows (until explicitly persisted)
+All editor UI state (EditTool, selection, numbering mode counters in UI — NumberingModeState in types is unused; numbering runs directly on vine arrays)
+Normalized map objects/texts (migration applied on read via lib/map-normalize.ts)
+IndexedDB index candidates (future)
+layouts.projectId
+grids.layoutId
+vines.gridId, vines.treatmentId
+treatments.layoutId
+mapObjects.layoutId, mapTexts.layoutId
+rows.gridId, composite (gridId, index) unique
+projects.createdAt (list recents)
+Future: updatedAt, deletedAt on all mutable entities
+ID generation
+Client-only: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}` — duplicated in new-project/page.tsx and TestGridClient.tsx. Not UUID v4; adequate offline but needs a single shared generator before sync.
+
+3. Current Persistence
+Storage
+Key	Value
+layout-orchard-projects
+JSON.stringify(ProjectData[]) — array of full project documents
+CRUD surface (lib/project-store.ts)
+Function	Operation
+createProjectData
+CREATE — append full document
+getProjectData(projectId)
+READ — find by project.id
+getLayoutData(layoutId)
+READ — find by layout.id
+getAllProjects
+READ — entire array
+addGridToLayout
+UPDATE — push one grid
+updateLayoutTreatments
+UPDATE — replace treatments[]
+updateLayoutVines
+UPDATE — replace vines[]
+updateLayoutMapObjects
+UPDATE — replace mapObjects[]
+updateLayoutMapTexts
+UPDATE — replace mapTexts[]
+updateLayoutRows
+UPDATE — replace rows[]
+Missing: delete project/layout/grid/vine/treatment/object/text/row; update single entity; update project/orchard/block/layout metadata; transactional multi-entity writes.
+
+Update pattern
+Every write:
+
+readProjects() — parse entire array
+Find project by layout.id
+Replace one array field (or push grid)
+saveProjects() — stringify and overwrite entire array
+Whole-array replacement for vines, treatments, objects, texts, rows — not incremental patches.
+
+Race conditions / inconsistency risks
+Last-write-wins across tabs — no versioning, locking, or merge.
+Dual React + storage state — vines, treatments, etc. live in React while grids live only in projectData. A bug in one persist* path could desync slices.
+ensureLayoutRows not auto-persisted — missing rows exist in React but not in storage until a row edit or new grid.
+layout.lastEditedAt never updated on edits despite field existing.
+addGridToLayout + updateLayoutRows — two separate writes when creating a grid (non-atomic; crash between them leaves partial state).
+No validation on read — corrupt JSON throws; no schema versioning.
+Treatment import reads other projects via getAllProjects() — cross-project read of full blobs.
+Orchard embedded per project — same orchard concept cannot be shared; duplication if multi-project same orchard is needed later.
+Accidental duplication
+Orchard data duplicated: embedded object + layout.orchardId reference.
+Entity arrays duplicated in React state and inside projectData after each persist (partial mirror).
+useLayoutEditor duplicates types/state already in types/index.ts and TestGridClient.
+4. Problems / Risks
+Before IndexedDB
+TestGridClient god component — persistence, domain logic, and UI intertwined; expensive to test and migrate.
+Split state model — grids in projectData, everything else in separate useState; high refactor cost.
+Document blob storage — loading one layout loads entire project + all entities; won't scale.
+No migrations/version field — schema changes are manual and fragile.
+Before sync / backend
+No updatedAt on entities — only Project.createdAt and Layout.lastEditedAt (stale).
+No soft deletes — hard deletes only; sync tombstones impossible without retrofits.
+No revision / etag per entity — conflict resolution will be guesswork.
+ID scheme not guaranteed globally unique under multi-device concurrent creation.
+Flat vine array — no layout FK on Vine; integrity enforced only by app logic.
+Row orphan risk — if grid row count ever changes, no cleanup of Row records (not implemented today).
+Treatment delete — blocked if vines reference it (good), but no cascade/orphan policy documented.
+1:1 Project–Layout assumption baked into storage shape — multi-layout projects would require structural change.
+Orchard as reusable catalog (types comment §15) vs embedded copy (implementation) — mismatch will hurt multi-project orchards.
+Expensive to change later
+Monolithic ProjectData blob → normalized stores
+Split React state → single source of truth / query layer
+Array-level writes → entity-level CRUD with transactions
+Adding sync metadata retroactively to all entities
+Home page / project list (currently fake data)
+5. Recommended IndexedDB Architecture
+Database
+name:    layout-orchard
+version: 1
+Use idb or Dexie later (not now). Start clean — no localStorage migration needed.
+
+Store design: normalized entities, not nested documents
+Store	keyPath	Indexes
+projects
+id
+createdAt, updatedAt
+orchards
+id
+name
+blocks
+id
+orchardId
+layouts
+id
+projectId (unique), orchardId, updatedAt
+grids
+id
+layoutId, blockId, [layoutId+order]
+vines
+id
+gridId, treatmentId, [gridId+rowNumber+bayIndex]
+treatments
+id
+layoutId
+mapObjects
+id
+layoutId
+mapTexts
+id
+layoutId
+rows
+id
+gridId, [gridId+index] unique
+meta
+key
+— (schema version, last sync cursor, device id)
+Relationships
+Keep FK fields on each record (layoutId, gridId, etc.).
+Do not nest children inside parent records.
+Load layout editor with scoped queries: grids.where('layoutId', id), same for vines/treatments/objects/texts/rows.
+Sync-ready metadata (add to all mutable entities)
+createdAt: string   // ISO
+updatedAt: string   // ISO
+deletedAt?: string | null  // soft delete tombstone
+rev?: number        // optional monotonic revision per entity
+Update Layout.updatedAt on every layout-scoped write. Add Project.updatedAt.
+
+Transactions
+Use IDB transactions spanning related stores, e.g. create grid + create N rows atomically:
+
+tx: [grids, rows]
+  → put grid
+  → putAll rows
+Query patterns
+Home: projects ordered by updatedAt desc
+Open editor: getLayoutByProjectId or by layoutId; parallel gets for child stores
+Import treatments: read from source layout’s treatments store, clone with new IDs into target layout
+6. Recommended Repository Layer
+components / pages
+       ↓
+hooks (useLayoutEditor, useProjectList)  ← thin React adapters
+       ↓
+repositories / services (domain API)
+       ↓
+storage adapter interface (StoragePort)
+       ↓
+IndexedDB implementation (later: SyncAdapter wraps same port)
+UI must not import localStorage or IndexedDB directly.
+
+Suggested module layout
+lib/
+  db/           — schema, migrations, openDatabase()
+  repositories/
+    project-repository.ts
+    layout-repository.ts
+    grid-repository.ts
+    vine-repository.ts
+    treatment-repository.ts
+    map-object-repository.ts
+    map-text-repository.ts
+    row-repository.ts
+  storage-port.ts   — interface
+Repository API (adapted to actual app)
+Projects
+
+createProject(input): Promise<{ project, orchard, blocks, layout }>
+getProject(id): Promise<ProjectBundle | null>
+listProjects(): Promise<ProjectSummary[]>
+updateProject(id, patch): Promise<Project>
+deleteProject(id): Promise<void>  // soft delete
+Layouts
+
+getLayout(id): Promise<Layout | null>
+getLayoutBundle(id): Promise<LayoutBundle>  // layout + all children for editor
+updateLayout(id, patch): Promise<Layout>
+LayoutBundle replaces today’s ProjectData for the editor:
+
+{ layout, orchard, blocks, grids, vines, treatments, mapObjects, mapTexts, rows }
+Grids
+
+createGrid(layoutId, data): Promise<{ grid, rows }>  // atomic
+updateGrid(id, patch): Promise<Grid>
+deleteGrid(id): Promise<void>  // + cascade vines/rows
+listGrids(layoutId): Promise<Grid[]>
+Vines
+
+createVine(data): Promise<Vine>
+updateVine(id, patch): Promise<Vine>
+deleteVine(id): Promise<void>
+replaceVinesForLayout(layoutId, vines): Promise<void>  // temporary bulk API for numbering until incremental updates exist
+listVinesByLayout(layoutId): Promise<Vine[]>
+Treatments, MapObjects, MapTexts, Rows — same CRUD pattern: create, get, update, delete, listByLayout / listByGrid.
+
+Cross-cutting
+
+runInTransaction(fn): Promise<T>
+exportLayout(id): Promise<Blob>   // future
+importLayout(blob): Promise<Layout>  // future
+Replace persist* functions in TestGridClient with repository calls; collapse duplicate React state into one layoutBundle state or a useLayoutEditorData(layoutId) hook.
+
+7. Offline / PWA Requirements
+What exists today
+Capability	Status
+Service worker
+None
+Web app manifest
+None
+Installability
+No
+Offline asset caching
+No
+Offline data
+Partial — localStorage works offline after first load, but app shell requires network for Next.js dev/prod JS bundles
+Metadata
+Generic "Create Next App" in app/layout.tsx
+public/
+Only default SVG icons
+Mobile viewport
+Configured (maximumScale: 1)
+What will be needed
+Web manifest — name, icons (192/512), display: standalone, theme colors, start_url.
+Service worker — cache app shell (HTML, JS, CSS, fonts); stale-while-revalidate or precache strategy.
+Next.js strategy — App Router offline is non-trivial:
+Option A: Static export (output: 'export') for fully static SPA + SW
+Option B: @serwist/next / custom SW precaching _next/static chunks
+Editor routes must work client-only (already "use client" heavy — good)
+App shell — loading/error states when offline + no cached bundle (needs UX).
+Data layer offline — IndexedDB (localStorage is synchronous, size-limited ~5MB, blocks main thread — poor for real offline-first).
+Install prompts — optional beforeinstallprompt handling.
+Background sync (later) — Sync API or custom queue when back online.
+8. Recommended Implementation Order
+Phase 1 — Foundation (do first)
+Canonical domain types — add createdAt / updatedAt / deletedAt to all mutable entities; single createId() utility.
+Storage port interface — define repository contracts without changing UI behavior yet.
+In-memory adapter — implement port with same semantics as today; unit-test repositories.
+Phase 2 — IndexedDB (second)
+IDB schema + migration runner (meta.store version).
+IndexedDB adapter implementing the port.
+Swap project-store for repositories behind the port — clean DB, no localStorage migration (per your instruction).
+Phase 3 — State refactor (third)
+useLayoutBundle(layoutId) hook — single load, single state tree; remove parallel useState slices in TestGridClient.
+Incremental entity writes — replace whole-array updateLayoutVines with updateVine / batched transactions where needed (numbering may still batch).
+Atomic grid creation — one transaction: grid + rows.
+Phase 4 — App completeness (fourth)
+Wire / home page — listProjects() from repository; “Open Layout” navigation.
+Update layout metadata — lastEditedAt / updatedAt on every write.
+Persist ensureLayoutRows on load — or generate rows only inside transactions at grid creation.
+Phase 5 — PWA (fifth)
+manifest.json + icons
+Service worker + app shell caching
+Offline fallback UI
+Phase 6 — Sync prep (sixth, before backend)
+Soft deletes + revision fields
+Outbox / change log store for pending sync operations
+Export/import for debugging and backup
+Phase 7 — Backend sync (later)
+Sync engine consuming outbox, conflict policy (likely last-write-wins initially, then per-entity merge)
+Auth + multi-user
+Clear recommendation: what to implement first, second, third…
+Order	What	Why
+1st
+Storage port + repository interfaces + shared createId / timestamp helpers
+Decouples UI from storage; zero behavior change; enables testing
+2nd
+IndexedDB schema + repository implementation (clean start)
+Real offline-first persistence; fixes blob/scaling issues
+3rd
+Refactor TestGridClient to one LayoutBundle hook calling repositories
+Eliminates dual-state bugs; biggest maintainability win
+4th
+Home page + project list wired to repositories
+Makes the app usable without hard-coded URLs
+5th
+PWA manifest + service worker
+Offline app loading, not just offline saving
+6th
+Sync metadata (updatedAt, soft deletes, outbox)
+Cheap now, expensive retroactively
+7th
+Sync engine + backend
+Builds on stable local model
+Do not migrate localStorage test data. Drop layout-orchard-projects when switching adapters.
+
+Highest-risk item to address early: the split between projectData.grids and separate entity state arrays in TestGridClient — fix this in step 3 before adding sync, or every repository integration will fight the UI layer.
+
+
+Sí. La auditoría de Cursor me parece bastante buena y, sobre todo, confirma que estás en un punto muy bueno para hacer el cambio a IndexedDB. No intentaría seguir agregando funcionalidades grandes antes de hacer esto.
+
+Lo más importante que veo:
+
+1. Tu app ya tiene una separación bastante clara
+
+La auditoría confirma que actualmente:
+
+UI → TestGridClient
+lógica de numbering → lib/numbering.ts
+geometría → lib/grid-geometry.ts
+persistencia → lib/project-store.ts
+
+Y, crucialmente, solo dos lugares están tocando directamente project-store.
+
+Eso hace que la migración sea bastante manejable.
+
+2. Sí: yo partiría desde cero con IndexedDB
+
+Estoy totalmente de acuerdo contigo en no migrar los datos de localStorage.
+
+Cursor propone:
+
+layout-orchard
+
+con stores separados para:
+
+projects
+orchards
+blocks
+layouts
+grids
+vines
+treatments
+mapObjects
+mapTexts
+rows
+meta
+
+Esto es muchísimo mejor que tu actual:
+
+localStorage
+└── layout-orchard-projects
+    └── [ProjectData completo]
+        ├── grids[]
+        ├── vines[]
+        ├── treatments[]
+        ├── objects[]
+        └── texts[]
+
+La auditoría identifica precisamente que actualmente cada modificación termina leyendo y reescribiendo todo el array de proyectos.
+
+Para una aplicación que quieres usar realmente en terreno y eventualmente sincronizar con backend, IndexedDB normalizado es el camino correcto.
+
+3. Hay algo todavía más importante que IndexedDB
+
+Cursor encontró un problema arquitectónico que yo sí arreglaría antes de empezar a pensar en backend:
+
+TestGridClient tiene alrededor de 1.350 líneas y está haciendo demasiadas cosas.
+
+Ahora mismo mezcla:
+
+UI
++
+estado
++
+persistencia
++
+CRUD
++
+numbering
++
+tratamientos
++
+objetos
++
+textos
++
+rows
++
+gestión del canvas
+
+La auditoría lo llama god component.
+
+No significa que tu código esté mal. Para prototipar rápidamente fue perfectamente razonable.
+
+Pero si ahora vamos a convertirlo en una aplicación real, es el momento correcto para ordenar esto.
+
+4. Yo NO haría todo lo que propone Cursor de golpe
+
+La auditoría recomienda:
+
+Storage port
+IndexedDB
+refactor de TestGridClient
+Home
+PWA
+sync metadata
+backend
+
+Estoy de acuerdo con el orden general, pero haría una pequeña modificación:
+
+ETAPA A — IndexedDB
+
+Primero:
+
+Types
+  ↓
+Storage interface
+  ↓
+IndexedDB
+  ↓
+Repositories
+  ↓
+TestGridClient
+
+Y no tocaría la UI visual.
+
+El objetivo sería:
+
+"La aplicación se ve y funciona exactamente igual, pero ya no utiliza localStorage."
+
+Eso es importantísimo.
+
+ETAPA B — Arreglar el estado
+
+Después haría:
+
+TestGridClient
+
+→
+
+useLayoutEditor()
+
+o equivalente.
+
+Porque actualmente tienes:
+
+projectData
+vines
+treatments
+mapObjects
+mapTexts
+layoutRows
+
+como estados separados. La auditoría confirma esta duplicación.
+
+Idealmente quieres terminar con algo conceptualmente parecido a:
+
+layoutData = {
+  layout,
+  orchard,
+  blocks,
+  grids,
+  vines,
+  treatments,
+  mapObjects,
+  mapTexts,
+  rows
+}
+
+y que IndexedDB sea la fuente persistente.
+
+ETAPA C — PWA
+
+Esto es especialmente importante para tu caso.
+
+Hay una diferencia entre:
+
+"Los datos funcionan offline"
+
+y
+
+"La aplicación funciona offline."
+
+Actualmente tienes lo primero parcialmente, pero no lo segundo. La auditoría confirma que todavía no tienes service worker, manifest ni caching del app shell.
+
+Para tu uso real en el orchard necesitas:
+
+Internet
+    ↓
+Abrir app una vez
+    ↓
+App queda instalada/cacheada
+    ↓
+SIN INTERNET
+    ↓
+Abrir app
+    ↓
+IndexedDB
+    ↓
+Trabajar normalmente
+
+Esto para mí es más importante que empezar todavía con un backend.
+
+ETAPA D — Backend después
+
+Ahí recién:
+
+                 ┌── IndexedDB
+                 │
+App ← Repository ┤
+                 │
+                 └── Sync Engine
+                         ↓
+                     Backend
+                         ↓
+                       DB
+
+Y eso te deja una arquitectura realmente buena:
+
+                    APP
+                     │
+               React / UI
+                     │
+              Repository API
+                ↙         ↘
+        IndexedDB       Sync Engine
+          LOCAL              │
+                             ↓
+                          Backend
+
+El usuario trabaja siempre contra la copia local.
+
+El backend no es necesario para que puedas usar la aplicación.
+
+Y hay una cosa que me gusta MUCHO de esta auditoría
+
+Cursor propone explícitamente:
+
+no migrar el localStorage de pruebas.
+
+Y comenzar con una IndexedDB limpia.
+
+Yo haría exactamente eso.
+
+Tus datos actuales son de desarrollo. No vale la pena gastar tiempo creando una migración para ellos.
+
+Mi recomendación concreta ahora
+
+Yo le diría a Cursor que NO empiece todavía a modificar código.
+
+Primero dale una instrucción muy precisa:
+
+Implementa solamente la Fase 1 + Fase 2 de la auditoría: Storage Port + IndexedDB limpia. No hagas todavía el refactor completo de TestGridClient, PWA, backend, sync, ni cambios visuales.
+
+Y que cumpla:
+
+❌ No localStorage
+❌ No migración
+❌ No backend
+❌ No PWA todavía
+❌ No cambios de UI
+
+✅ IndexedDB desde cero
+✅ stores normalizados
+✅ repositories
+✅ timestamps
+✅ IDs centralizados
+✅ transacciones
+✅ app sigue funcionando igual
+
+Después hacemos una prueba muy concreta:
+
+Crear Project → cerrar/reabrir → comprobar que todo sigue ahí → editar Grid/Vines/Treatments/Objects/Text/Rows → recargar → comprobar que todo sigue ahí.
+
+Si eso funciona, recién pasamos a reorganizar TestGridClient.
+
+Y después de eso, yo priorizaría PWA antes que backend.
+
+Porque tu necesidad inmediata es usar la app la próxima semana sin depender de Internet. El backend puede esperar; IndexedDB + PWA no.
+
+La auditoría incluso confirma que el punto de mayor riesgo actual es precisamente la separación entre projectData.grids y los otros arrays de estado.
+
+En resumen: estás en un muy buen momento para dejar de "construir features" y empezar a convertir el prototipo en producto.

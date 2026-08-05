@@ -26,10 +26,7 @@ import {
   Vine,
 } from "@/types";
 
-function createId(): UUID {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-
+import { createId } from "@/lib/create-id";
 import { Canvas, type CanvasDragIntent } from "@/components/layout-editor/Canvas";
 import { EditObjectModal, type MapObjectFormFields } from "@/components/layout-editor/EditObjectModal";
 import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModal";
@@ -140,6 +137,7 @@ export function TestGridClient() {
   const [layoutLoadState, setLayoutLoadState] = useState<
     "idle" | "loading" | "ready" | "not-found"
   >("idle");
+  const [importProjects, setImportProjects] = useState<ProjectData[]>([]);
 
   useEffect(() => {
     if (!layoutId) {
@@ -147,26 +145,73 @@ export function TestGridClient() {
       return;
     }
 
-    setLayoutLoadState("loading");
-    const data = getLayoutData(layoutId);
+    let cancelled = false;
 
-    if (data) {
-      const grids = data.grids ?? [];
-      setProjectData({
-        ...data,
-        grids,
-      });
+    const activeLayoutId = layoutId;
 
-      setTreatments(data.treatments ?? []);
-      setVines(data.vines ?? []);
-      setMapObjects(normalizeMapObjects(data.mapObjects ?? []));
-      setMapTexts(normalizeMapTexts(data.mapTexts ?? []));
-      setLayoutRows(ensureLayoutRows(grids, data.rows ?? []));
-      setLayoutLoadState("ready");
+    async function loadLayout() {
+      setLayoutLoadState("loading");
+
+      try {
+        const data = await getLayoutData(activeLayoutId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (data) {
+          const grids = data.grids ?? [];
+          setProjectData({
+            ...data,
+            grids,
+          });
+
+          setTreatments(data.treatments ?? []);
+          setVines(data.vines ?? []);
+          setMapObjects(normalizeMapObjects(data.mapObjects ?? []));
+          setMapTexts(normalizeMapTexts(data.mapTexts ?? []));
+          setLayoutRows(ensureLayoutRows(grids, data.rows ?? []));
+          setLayoutLoadState("ready");
+          return;
+        }
+
+        setLayoutLoadState("not-found");
+      } catch (error) {
+        console.error("[layout] Failed to load layout from storage", error);
+        if (!cancelled) {
+          setLayoutLoadState("not-found");
+        }
+      }
+    }
+
+    void loadLayout();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [layoutId]);
+
+  useEffect(() => {
+    if (!layoutId) {
+      setImportProjects([]);
       return;
     }
 
-    setLayoutLoadState("not-found");
+    let cancelled = false;
+
+    void getAllProjects()
+      .then((projects) => {
+        if (!cancelled) {
+          setImportProjects(projects);
+        }
+      })
+      .catch((error) => {
+        console.error("[layout] Failed to load projects for import", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [layoutId]);
 
   if (layoutLoadState === "loading") {
@@ -191,7 +236,7 @@ export function TestGridClient() {
     return null;
   }
 
-  function handleCreateGrid(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateGrid(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!projectData || !layoutId || !selectedBlockId) {
@@ -211,37 +256,35 @@ export function TestGridClient() {
       layer: 1,
     };
 
-    const updatedData = addGridToLayout(layoutId, newGrid);
+    const newGridRows = createRowsForGrid(newGrid.id, Number(rows), createId);
+    const existingRows = ensureLayoutRows(
+      projectData.grids ?? [],
+      layoutRowsRef.current
+    );
+    const nextRows = [...existingRows, ...newGridRows];
+    const saved = await addGridToLayout(layoutId, newGrid, newGridRows);
 
-    if (!updatedData) {
+    if (!saved) {
       return;
     }
 
-    const newGridRows = createRowsForGrid(newGrid.id, Number(rows), createId);
-    const existingRows = ensureLayoutRows(
-      updatedData.grids ?? [],
-      updatedData.rows ?? layoutRowsRef.current
-    );
-    const nextRows = [...existingRows, ...newGridRows];
-    const saved = updateLayoutRows(layoutId, nextRows);
-
     setLayoutRows(nextRows);
     setProjectData({
-      ...(saved ?? updatedData),
-      grids: (saved ?? updatedData).grids ?? [],
+      ...saved,
+      grids: saved.grids ?? [],
       rows: nextRows,
     });
 
     setShowCreateGrid(false);
   }
 
-  function persistRows(updatedRows: Row[]) {
+  async function persistRows(updatedRows: Row[]) {
     if (!layoutId) {
       return;
     }
 
     setLayoutRows(updatedRows);
-    const saved = updateLayoutRows(layoutId, updatedRows);
+    const saved = await updateLayoutRows(layoutId, updatedRows);
     if (saved) {
       setProjectData((current) =>
         current ? { ...current, rows: updatedRows } : current
@@ -261,7 +304,7 @@ export function TestGridClient() {
       displayNumber
     );
 
-    persistRows(updatedRows);
+    void persistRows(updatedRows);
     setRowNumberModalState(null);
   }
 
@@ -272,13 +315,13 @@ export function TestGridClient() {
     setSelectedTextId(null);
   }
 
-  function persistVines(updatedVines: Vine[]) {
+  async function persistVines(updatedVines: Vine[]) {
     if (!layoutId) {
       return;
     }
 
     setVines(updatedVines);
-    const saved = updateLayoutVines(layoutId, updatedVines);
+    const saved = await updateLayoutVines(layoutId, updatedVines);
     if (saved) {
       setProjectData((current) =>
         current ? { ...current, vines: updatedVines } : current
@@ -286,13 +329,13 @@ export function TestGridClient() {
     }
   }
 
-  function persistMapObjects(updatedObjects: MapObject[]) {
+  async function persistMapObjects(updatedObjects: MapObject[]) {
     if (!layoutId) {
       return;
     }
 
     setMapObjects(updatedObjects);
-    const saved = updateLayoutMapObjects(layoutId, updatedObjects);
+    const saved = await updateLayoutMapObjects(layoutId, updatedObjects);
     if (saved) {
       setProjectData((current) =>
         current ? { ...current, mapObjects: updatedObjects } : current
@@ -300,13 +343,13 @@ export function TestGridClient() {
     }
   }
 
-  function persistMapTexts(updatedTexts: MapText[]) {
+  async function persistMapTexts(updatedTexts: MapText[]) {
     if (!layoutId) {
       return;
     }
 
     setMapTexts(updatedTexts);
-    const saved = updateLayoutMapTexts(layoutId, updatedTexts);
+    const saved = await updateLayoutMapTexts(layoutId, updatedTexts);
     if (saved) {
       setProjectData((current) =>
         current ? { ...current, mapTexts: updatedTexts } : current
@@ -806,22 +849,22 @@ export function TestGridClient() {
   }
 
   const importLayoutOptions: ImportLayoutOption[] = layoutId
-    ? getAllProjects()
+    ? importProjects
         .filter((project) => project.layout.id !== layoutId)
         .map((project) => ({
           layoutId: project.layout.id,
-          label: project.orchard.name,
+          label: project.project.name,
           treatments: project.treatments ?? [],
         }))
     : [];
 
-  function persistTreatments(updatedTreatments: Treatment[]) {
+  async function persistTreatments(updatedTreatments: Treatment[]) {
     if (!layoutId) {
       return;
     }
 
     setTreatments(updatedTreatments);
-    const saved = updateLayoutTreatments(layoutId, updatedTreatments);
+    const saved = await updateLayoutTreatments(layoutId, updatedTreatments);
     if (saved) {
       setProjectData((current) =>
         current ? { ...current, treatments: updatedTreatments } : current
