@@ -981,9 +981,9 @@ export function TestGridClient() {
       {/* Editor chrome: mobile-first grid, desktop absolute positioning.
           Wrappers use pointer-events-none so empty grid gaps do not block Canvas touch.
           Interactive panels re-enable pointer-events-auto on their own bounds. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-50 px-2 pt-2 sm:px-3 sm:pt-3 lg:px-4 lg:pt-4">
-        <div className="pointer-events-none grid grid-cols-[6.75rem_7.4rem] items-start justify-between gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:justify-normal sm:gap-3 lg:block">
-          <div className="pointer-events-none flex w-[6.75rem] min-w-0 flex-col gap-1.5 sm:w-auto sm:max-w-xs sm:gap-3 md:max-w-sm lg:absolute lg:left-0 lg:top-0 lg:w-44 lg:max-w-none lg:gap-3">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-50 px-2 pt-2 sm:px-3 sm:pt-3 md:p-0">
+        <div className="pointer-events-none grid grid-cols-[6.75rem_7.4rem] items-start justify-between gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:justify-normal sm:gap-3 md:block">
+          <div className="pointer-events-none flex w-[6.75rem] min-w-0 flex-col gap-1.5 sm:w-auto sm:max-w-xs sm:gap-3 md:absolute md:left-8 md:top-8 md:w-44 md:max-w-none md:gap-3 lg:left-10 lg:top-10">
             <div className="pointer-events-auto rounded-lg bg-white p-1.5 shadow-md sm:rounded-xl sm:p-3 lg:p-4">
               <dl className="space-y-1 sm:space-y-2 lg:space-y-3">
                 <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] leading-snug sm:text-xs lg:block lg:text-sm">
@@ -1020,7 +1020,7 @@ export function TestGridClient() {
           </div>
 
           {layoutId && (
-            <div className="pointer-events-auto w-[7.4rem] shrink-0 sm:w-44 md:w-48 lg:absolute lg:right-0 lg:top-28 lg:w-auto">
+            <div className="pointer-events-auto w-[7.4rem] shrink-0 sm:w-44 md:absolute md:right-8 md:top-28 md:w-48 lg:right-10 lg:w-auto">
               <TreatmentsMenu
                 treatments={layoutTreatments}
                 vineCountByTreatmentId={vineCountByTreatmentId}
@@ -1072,7 +1072,7 @@ export function TestGridClient() {
       )}
 
       {numberingModeActive && (
-        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-[#66806b]/30 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 lg:top-4">
+        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-[#66806b]/30 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 md:max-w-[calc(100%-4rem)] lg:top-4">
           <p className="pointer-events-auto text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f4034] sm:text-xs sm:tracking-[0.18em]">
             Numbering Mode
           </p>
@@ -1080,7 +1080,7 @@ export function TestGridClient() {
       )}
 
       {objectsModeActive && (
-        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-blue-200 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 lg:top-4">
+        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-blue-200 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 md:max-w-[calc(100%-4rem)] lg:top-4">
           <p className="pointer-events-auto text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#1e3a8a] sm:text-xs sm:tracking-[0.18em]">
             Objects Mode
           </p>
@@ -1088,7 +1088,7 @@ export function TestGridClient() {
       )}
 
       {textsModeActive && (
-        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-purple-200 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 lg:top-4">
+        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-purple-200 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 md:max-w-[calc(100%-4rem)] lg:top-4">
           <p className="pointer-events-auto text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6b21a8] sm:text-xs sm:tracking-[0.18em]">
             Texts Mode
           </p>

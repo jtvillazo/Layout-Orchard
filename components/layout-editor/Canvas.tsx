@@ -865,11 +865,8 @@ export function Canvas({
         onClick={handleReset}
         disabled={isDefaultView}
         aria-label="Restablecer vista"
+        className="absolute bottom-4 right-4 z-10 md:bottom-[15%] md:right-6"
         style={{
-          position: "absolute",
-          bottom: 16,
-          right: 16,
-          zIndex: 10,
           padding: "8px 14px",
           borderRadius: 8,
           border: "1px solid #D1D5DB",
