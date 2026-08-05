@@ -27,6 +27,7 @@ import {
 } from "@/types";
 
 import { createId } from "@/lib/create-id";
+import { AppHeader } from "@/components/app/AppHeader";
 import { Canvas, type CanvasDragIntent } from "@/components/layout-editor/Canvas";
 import { EditObjectModal, type MapObjectFormFields } from "@/components/layout-editor/EditObjectModal";
 import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModal";
@@ -55,8 +56,11 @@ import { normalizeMapObjects, normalizeMapTexts } from "@/lib/map-normalize";
 import {
   createRowsForGrid,
   ensureLayoutRows,
+  estimateCanvasUiScale,
   findRowHandleAtPoint,
   getGridRowDisplayNumbers,
+  getRowHandleHitRadiusContent,
+  isCompactRowHandleViewport,
   updateRowDisplayNumber,
 } from "@/lib/row-numbers";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
@@ -216,19 +220,25 @@ export function TestGridClient() {
 
   if (layoutLoadState === "loading") {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-gray-500">Loading layout...</p>
-      </main>
+      <div className="flex min-h-screen flex-col bg-[#f5f6f2]">
+        <AppHeader variant="edit" />
+        <main className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-gray-500">Loading layout...</p>
+        </main>
+      </div>
     );
   }
 
   if (layoutLoadState === "not-found") {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6">
-        <p className="max-w-sm text-center text-sm text-gray-500">
-          Layout not found. The project may not have been saved correctly.
-        </p>
-      </main>
+      <div className="flex min-h-screen flex-col bg-[#f5f6f2]">
+        <AppHeader variant="edit" />
+        <main className="flex flex-1 items-center justify-center p-6">
+          <p className="max-w-sm text-center text-sm text-gray-500">
+            Layout not found. The project may not have been saved correctly.
+          </p>
+        </main>
+      </div>
     );
   }
 
@@ -802,7 +812,16 @@ export function TestGridClient() {
       return false;
     }
 
-    if (findRowHandleAtPoint(grids, point)) {
+    if (
+      findRowHandleAtPoint(
+        grids,
+        point,
+        getRowHandleHitRadiusContent(
+          estimateCanvasUiScale(),
+          isCompactRowHandleViewport()
+        )
+      )
+    ) {
       return false;
     }
 
@@ -955,7 +974,10 @@ export function TestGridClient() {
       : null;
 
   return (
-    <div className="relative min-h-screen">
+    <div className="flex min-h-screen flex-col bg-[#f5f6f2]">
+      <AppHeader variant="edit" />
+
+      <div className="relative min-h-0 flex-1">
       {/* Editor chrome: mobile-first grid, desktop absolute positioning.
           Wrappers use pointer-events-none so empty grid gaps do not block Canvas touch.
           Interactive panels re-enable pointer-events-auto on their own bounds. */}
@@ -1392,6 +1414,7 @@ export function TestGridClient() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

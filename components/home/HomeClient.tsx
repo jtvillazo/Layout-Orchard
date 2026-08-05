@@ -8,6 +8,7 @@ import { getLayoutEditorPath } from "@/lib/layout-list-utils";
 import { getAllProjects } from "@/lib/project-store";
 import type { ProjectData } from "@/lib/storage/project-data";
 
+import { AppHeader } from "@/components/app/AppHeader";
 import { LayoutListModal } from "./LayoutListModal";
 import { RecentLayouts } from "./RecentLayouts";
 
@@ -61,27 +62,10 @@ export function HomeClient() {
 
   return (
     <main className="min-h-screen bg-[#f5f6f2] text-[#1f2a24]">
-      <header className="flex items-center justify-between px-4 py-5 sm:px-8 sm:py-6">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
-            Layout Orchard
-          </h1>
-          <p className="text-sm text-gray-500">Orchard layout management</p>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            className="rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-white sm:px-4"
-          >
-            Settings
-          </button>
-
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce5dc] text-sm font-medium">
-            JV
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        variant="home"
+        onOpenLayouts={() => setModalMode("view-all")}
+      />
 
       <section className="mx-auto max-w-6xl px-4 pt-8 pb-12 sm:px-8 sm:pt-16 sm:pb-20">
         <div className="max-w-2xl">
@@ -104,7 +88,7 @@ export function HomeClient() {
               href="/new-project"
               className="rounded-xl bg-[#2f4034] px-6 py-3 text-center text-sm font-medium text-white transition hover:bg-[#243329]"
             >
-              + New Project
+              + New Layout
             </Link>
 
             <button

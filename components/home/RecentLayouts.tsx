@@ -42,7 +42,7 @@ export function RecentLayouts({
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white/70 px-4 py-10 text-center sm:px-6">
           <p className="text-sm font-medium text-gray-700">No layouts yet.</p>
           <p className="mt-1 text-sm text-gray-500">
-            Create a project to get started.
+            Create a layout to get started.
           </p>
         </div>
       ) : (

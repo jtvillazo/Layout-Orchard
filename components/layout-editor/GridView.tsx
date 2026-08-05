@@ -9,6 +9,11 @@ import {
   ROW_SPACING,
 } from "@/lib/grid-geometry";
 import { useCanvasUi } from "@/components/layout-editor/canvas-ui-context";
+import { useCompactViewport } from "@/hooks/useCompactViewport";
+import {
+  getRowHandleContentMetrics,
+  type RowHandleContentMetrics,
+} from "@/lib/row-numbers";
 
 interface GridViewProps {
   grid: Grid;
@@ -31,7 +36,7 @@ interface RowNumberHandleProps {
   y: number;
   end: "top" | "bottom";
   displayNumber: number | null;
-  uiScale: number;
+  metrics: RowHandleContentMetrics;
   onClick: () => void;
 }
 
@@ -42,13 +47,10 @@ function RowNumberHandle({
   y,
   end,
   displayNumber,
-  uiScale,
+  metrics,
   onClick,
 }: RowNumberHandleProps) {
-  const hitRadius = 16 * uiScale;
-  const dotRadius = 7 * uiScale;
-  const fontSize = 30 * uiScale;
-  const labelOffset = dotRadius + 25 * uiScale;
+  const { hitRadius, dotRadius, fontSize, labelOffset, strokeWidth } = metrics;
 
   const handleClick = (event: MouseEvent) => {
     event.stopPropagation();
@@ -76,7 +78,7 @@ function RowNumberHandle({
         r={dotRadius}
         fill="#E5E7EB"
         stroke="#9CA3AF"
-        strokeWidth={Math.max(0.75, uiScale * 0.75)}
+        strokeWidth={strokeWidth}
       />
       {displayNumber !== null && (
         <text
@@ -110,7 +112,9 @@ export function GridView({
   onRowNumberHandleClick,
 }: GridViewProps) {
   const { getContentUiScale, viewRevision } = useCanvasUi();
+  const compactViewport = useCompactViewport();
   const uiScale = getContentUiScale();
+  const rowHandleMetrics = getRowHandleContentMetrics(uiScale, compactViewport);
   void viewRevision;
 
   const treatmentById = new Map(treatments.map((t) => [t.id, t]));
@@ -146,7 +150,7 @@ export function GridView({
             y={bottom.y}
             end="bottom"
             displayNumber={displayNumber}
-            uiScale={uiScale}
+            metrics={rowHandleMetrics}
             onClick={() => onRowNumberHandleClick(rowNumber)}
           />
           <RowNumberHandle
@@ -154,7 +158,7 @@ export function GridView({
             y={top.y}
             end="top"
             displayNumber={displayNumber}
-            uiScale={uiScale}
+            metrics={rowHandleMetrics}
             onClick={() => onRowNumberHandleClick(rowNumber)}
           />
         </g>

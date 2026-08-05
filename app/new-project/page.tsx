@@ -124,9 +124,9 @@ export default function NewProjectPage() {
           </button>
 
           <div>
-            <h1 className="text-lg font-semibold">New Project</h1>
+            <h1 className="text-lg font-semibold">New Layout</h1>
             <p className="text-sm text-gray-500">
-              Create a project and its first layout
+              Create a new layout
             </p>
           </div>
         </header>
@@ -234,7 +234,7 @@ export default function NewProjectPage() {
             onClick={handleCreateClick}
             className="w-full rounded-xl bg-[#2f4034] px-5 py-4 text-sm font-medium text-white transition hover:bg-[#243329]"
           >
-            Create Project
+            Create Layout
           </button>
         </form>
       </div>
