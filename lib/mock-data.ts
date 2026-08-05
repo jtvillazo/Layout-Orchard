@@ -81,11 +81,11 @@ export const mockGrid2: Grid = {
 // Nota: row.index es la posición física; row.label es lo que el usuario tocó y asignó
 
 export const mockRows: Row[] = [
-  { id: "row-1a", gridId: "grid-1", index: 1, label: "1" },
-  { id: "row-1b", gridId: "grid-1", index: 2, label: "2" },
-  { id: "row-1c", gridId: "grid-1", index: 3, label: "3" },
-  { id: "row-2a", gridId: "grid-2", index: 1, label: "4" },
-  { id: "row-2b", gridId: "grid-2", index: 2, label: "5" },
+  { id: "row-1a", gridId: "grid-1", index: 1, displayNumber: 1 },
+  { id: "row-1b", gridId: "grid-1", index: 2, displayNumber: 2 },
+  { id: "row-1c", gridId: "grid-1", index: 3, displayNumber: 3 },
+  { id: "row-2a", gridId: "grid-2", index: 1, displayNumber: 4 },
+  { id: "row-2b", gridId: "grid-2", index: 2, displayNumber: 5 },
 ];
 
 // ─── Treatments ───
@@ -247,12 +247,12 @@ export const mockObjects: MapObject[] = [
   {
     id: "object-1",
     layoutId: "layout-1",
-    kind: "icon",
-    icon: "water",
-    position: { x: -50, y: 100 },
-    rotation: 0,
-    scale: 1,
-    layer: 3, // subida de capa para resolver superposición con el grid
+    x: -50,
+    y: 100,
+    name: "Water",
+    shape: "circle",
+    color: "#0EA5E9",
+    size: 24,
   },
 ];
 
@@ -262,10 +262,9 @@ export const mockTexts: MapText[] = [
   {
     id: "text-1",
     layoutId: "layout-1",
-    content: "Entrada principal ↓",
-    position: { x: 0, y: -40 },
-    rotation: 0,
-    scale: 1,
-    layer: 2,
+    x: 0,
+    y: -40,
+    text: "Entrada principal ↓",
+    fontSize: 16,
   },
 ];

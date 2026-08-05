@@ -88,6 +88,7 @@ export default function NewProjectPage() {
       vines: [],
       mapObjects: [],
       mapTexts: [],
+      rows: [],
     });
 
     router.push(`/test-grid?layoutId=${layoutId}`);

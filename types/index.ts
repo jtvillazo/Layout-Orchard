@@ -52,8 +52,11 @@ interface GridCell {
 interface Row {
   id: UUID;
   gridId: UUID;
-  index: number; // posición física dentro del grid, 1 a rows
-  label: string | null; // número que el usuario asignó tocando el extremo; null = sin asignar
+  index: number; // posición física dentro del grid, 1 a rows — maps to vine rowNumber
+  /** Visual/physical row number shown at row endpoints; independent of index. */
+  displayNumber?: number | null;
+  /** @deprecated use displayNumber */
+  label?: string | null;
 }
 
 // ─── Treatment ───
@@ -114,38 +117,30 @@ interface Vine extends LayoutElement {
 
 // ─── Objeto ───
 
-type PredefinedObjectIcon =
-  | "camera"
-  | "sensor"
-  | "water"
-  | "toilet"
-  | "entrance"
-  | "other";
+type ObjectShape = "circle" | "square" | "triangle";
 
-interface MapObject extends LayoutElement {
+interface MapObject {
   id: UUID;
   layoutId: UUID;
-  kind: "icon" | "shape";
-  icon?: PredefinedObjectIcon;
-  shape?: "square" | "rectangle" | "circle";
-  color?: string;
-  text?: string;
-  position: { x: number; y: number };
-  rotation: number;
-  scale: number;
-  // layer: number — heredado, default 2
+  x: number;
+  y: number;
+  name: string;
+  shape: ObjectShape;
+  color: string;
+  size: number;
+  comment?: string;
 }
 
 // ─── Texto libre ───
 
-interface MapText extends LayoutElement {
+interface MapText {
   id: UUID;
   layoutId: UUID;
-  content: string;
-  position: { x: number; y: number };
-  rotation: number;
-  scale: number;
-  // layer: number — heredado, default 2
+  x: number;
+  y: number;
+  text: string;
+  fontSize: number;
+  comment?: string;
 }
 
 // ─── Modo global del Layout ───
@@ -220,7 +215,7 @@ export type {
   LayoutElement,
   Grid,
   Vine,
-  PredefinedObjectIcon,
+  ObjectShape,
   MapObject,
   MapText,
   LayoutMode,

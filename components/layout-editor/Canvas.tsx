@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { PixelPoint } from "@/lib/grid-geometry";
 import { screenClientToContentPoint } from "@/lib/viewport";
 import { DotBackground } from "./DotBackground";
+import { CanvasUiContext } from "./canvas-ui-context";
 
 interface ViewBox {
   x: number;
@@ -22,7 +23,11 @@ export type CanvasDragIntent = "pan" | "element";
 interface CanvasProps {
   children: React.ReactNode;
   initialViewBox?: ViewBox;
-  onLongPress?: (clientX: number, clientY: number, point: PixelPoint | null) => void;
+  onLongPress?: (
+    clientX: number,
+    clientY: number,
+    point: PixelPoint | null
+  ) => boolean | void;
   onSurfaceClick?: (
     target: Element | null,
     clientX: number,
@@ -37,6 +42,8 @@ interface CanvasProps {
   ) => CanvasDragIntent;
   onElementDrag?: (contentPoint: PixelPoint) => void;
   onElementDragEnd?: () => void;
+  getLongPressDuration?: (contentPoint: PixelPoint | null) => number;
+  screenOverlay?: React.ReactNode;
 }
 
 type ScreenPoint = { x: number; y: number };
@@ -55,8 +62,11 @@ export function Canvas({
   getDragIntent,
   onElementDrag,
   onElementDragEnd,
+  getLongPressDuration,
+  screenOverlay,
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
+  const [viewRevision, setViewRevision] = useState(0);
   const [rotation, setRotation] = useState(0);
   // Pivote de rotación fijo en el mundo: se calcula una sola vez a partir del
   // viewBox inicial y NUNCA se recalcula durante el pan. Si el pivote siguiera
@@ -93,6 +103,8 @@ export function Canvas({
   onElementDragRef.current = onElementDrag;
   const onElementDragEndRef = useRef(onElementDragEnd);
   onElementDragEndRef.current = onElementDragEnd;
+  const getLongPressDurationRef = useRef(getLongPressDuration);
+  getLongPressDurationRef.current = getLongPressDuration;
 
   const viewBoxRef = useRef(viewBox);
   viewBoxRef.current = viewBox;
@@ -320,9 +332,23 @@ export function Canvas({
       svg && contentGroup
         ? screenClientToContentPoint(svg, contentGroup, clientX, clientY)
         : null;
-    onLongPressRef.current?.(clientX, clientY, point);
+    const shouldDragElement = onLongPressRef.current?.(clientX, clientY, point);
     longPressTriggered.current = true;
+    if (shouldDragElement) {
+      elementDragActive.current = true;
+    }
   };
+
+  const resolveLongPressDuration = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    const contentGroup = contentGroupRef.current;
+    const point =
+      svg && contentGroup
+        ? screenClientToContentPoint(svg, contentGroup, clientX, clientY)
+        : null;
+
+    return getLongPressDurationRef.current?.(point) ?? LONG_PRESS_DURATION;
+  }, []);
 
   const startLongPressTimerAt = (
     startPos: ScreenPoint,
@@ -330,12 +356,13 @@ export function Canvas({
   ) => {
     clearLongPressTimer();
     longPressStartPosition.current = startPos;
-    console.log("[LONG PRESS] timer started");
+    const duration = resolveLongPressDuration(startPos.x, startPos.y);
+    console.log("[LONG PRESS] timer started", { duration });
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null;
       const current = getCurrentPosition();
       fireLongPress(current.x, current.y);
-    }, LONG_PRESS_DURATION);
+    }, duration);
   };
 
   // ─── Touch nativo + bloqueo de scroll iOS ───
@@ -712,7 +739,77 @@ export function Canvas({
     viewBox.width === initialViewBoxRef.current.width &&
     viewBox.height === initialViewBoxRef.current.height;
 
+  useEffect(() => {
+    setViewRevision((current) => current + 1);
+  }, [viewBox, rotation]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      setViewRevision((current) => current + 1);
+    });
+
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
+
+  const contentToContainer = useCallback((contentX: number, contentY: number) => {
+    const svg = svgRef.current;
+    const contentGroup = contentGroupRef.current;
+    const container = containerRef.current;
+
+    if (!svg || !contentGroup || !container) {
+      return null;
+    }
+
+    const point = svg.createSVGPoint();
+    point.x = contentX;
+    point.y = contentY;
+
+    const matrix = contentGroup.getScreenCTM();
+    if (!matrix) {
+      return null;
+    }
+
+    const transformed = point.matrixTransform(matrix);
+    const containerRect = container.getBoundingClientRect();
+
+    return {
+      x: transformed.x - containerRect.left,
+      y: transformed.y - containerRect.top,
+    };
+  }, []);
+
+  const getContentUiScale = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return 1;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return 1;
+    }
+
+    return viewBoxRef.current.width / rect.width;
+  }, []);
+
+  const uiContextValue = useMemo(
+    () => ({
+      contentToContainer,
+      viewRevision,
+      getContentUiScale,
+    }),
+    [contentToContainer, viewRevision, getContentUiScale]
+  );
+
   return (
+    <CanvasUiContext.Provider value={uiContextValue}>
     <div
       ref={containerRef}
       style={{
@@ -759,6 +856,8 @@ export function Canvas({
         onContextMenu={(e) => e.preventDefault()}
       />
 
+      {screenOverlay}
+
       <button
         type="button"
         onPointerDown={(e) => e.stopPropagation()}
@@ -787,6 +886,7 @@ export function Canvas({
         Restablecer vista
       </button>
     </div>
+    </CanvasUiContext.Provider>
   );
 }
 

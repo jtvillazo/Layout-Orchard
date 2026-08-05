@@ -2,41 +2,62 @@
 
 import { FormEvent, useState } from "react";
 
-import type { MapObject, PredefinedObjectIcon } from "@/types";
+import type { MapObject, ObjectShape } from "@/types";
 
-import { OBJECT_TYPE_DEFINITIONS } from "@/lib/object-types";
+import {
+  DEFAULT_OBJECT_COLOR,
+  DEFAULT_OBJECT_SIZE,
+  MAX_OBJECT_SIZE,
+  MIN_OBJECT_SIZE,
+  OBJECT_SHAPE_DEFINITIONS,
+} from "@/lib/object-shapes";
 
-export interface MapObjectEditableFields {
+export interface MapObjectFormFields {
   name: string;
-  icon: PredefinedObjectIcon;
-  scale: number;
+  shape: ObjectShape;
   color: string;
+  size: number;
+  comment?: string;
 }
 
 interface EditObjectModalProps {
-  object: MapObject;
-  onSave: (updates: MapObjectEditableFields) => void;
+  mode: "create" | "edit";
+  initialValues?: MapObject;
+  onSave: (fields: MapObjectFormFields) => void;
   onCancel: () => void;
 }
 
 export function EditObjectModal({
-  object,
+  mode,
+  initialValues,
   onSave,
   onCancel,
 }: EditObjectModalProps) {
-  const [name, setName] = useState(object.text ?? "");
-  const [icon, setIcon] = useState<PredefinedObjectIcon>(object.icon ?? "sensor");
-  const [scale, setScale] = useState(object.scale || 1);
-  const [color, setColor] = useState(object.color ?? "#66806b");
+  const [name, setName] = useState(initialValues?.name ?? "");
+  const [shape, setShape] = useState<ObjectShape>(
+    initialValues?.shape ?? "circle"
+  );
+  const [comment, setComment] = useState(initialValues?.comment ?? "");
+  const [color, setColor] = useState(initialValues?.color ?? DEFAULT_OBJECT_COLOR);
+  const [size, setSize] = useState(initialValues?.size ?? DEFAULT_OBJECT_SIZE);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    const trimmedComment = comment.trim();
+    const clampedSize = Math.max(MIN_OBJECT_SIZE, Math.min(MAX_OBJECT_SIZE, size));
+
     onSave({
-      name: name.trim(),
-      icon,
-      scale,
+      name: trimmedName,
+      shape,
       color,
+      size: clampedSize,
+      ...(trimmedComment ? { comment: trimmedComment } : {}),
     });
   }
 
@@ -44,9 +65,11 @@ export function EditObjectModal({
     <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl sm:p-6">
         <div className="mb-5">
-          <h2 className="text-lg font-semibold text-gray-900">Edit Object</h2>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {mode === "create" ? "Add Object" : "Edit Object"}
+          </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Update the object label and appearance.
+            Configure the object placed on the layout.
           </p>
         </div>
 
@@ -59,44 +82,39 @@ export function EditObjectModal({
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
+              autoFocus
+              required
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
-              placeholder="Object name"
+              placeholder="Sensor"
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Type
-            </span>
-            <select
-              value={icon}
-              onChange={(event) =>
-                setIcon(event.target.value as PredefinedObjectIcon)
-              }
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
-            >
-              {OBJECT_TYPE_DEFINITIONS.map((definition) => (
-                <option key={definition.type} value={definition.type}>
-                  {definition.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset>
+            <legend className="mb-2 block text-sm font-medium text-gray-700">
+              Shape
+            </legend>
+            <div className="grid grid-cols-3 gap-2">
+              {OBJECT_SHAPE_DEFINITIONS.map((definition) => {
+                const selected = shape === definition.shape;
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Size ({scale.toFixed(1)}x)
-            </span>
-            <input
-              type="range"
-              min={0.6}
-              max={2}
-              step={0.1}
-              value={scale}
-              onChange={(event) => setScale(Number(event.target.value))}
-              className="w-full"
-            />
-          </label>
+                return (
+                  <button
+                    key={definition.shape}
+                    type="button"
+                    onClick={() => setShape(definition.shape)}
+                    className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-xs ${
+                      selected
+                        ? "border-[#66806b] bg-[#f3f7f4] font-medium text-[#2f4034]"
+                        : "border-gray-200 text-gray-700 active:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-lg leading-none">{definition.symbol}</span>
+                    <span>{definition.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -107,6 +125,34 @@ export function EditObjectModal({
               value={color}
               onChange={(event) => setColor(event.target.value)}
               className="h-11 w-full cursor-pointer rounded-xl border border-gray-200 bg-white p-1"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Size
+            </span>
+            <input
+              type="number"
+              min={MIN_OBJECT_SIZE}
+              max={MAX_OBJECT_SIZE}
+              value={size}
+              onChange={(event) => setSize(Number(event.target.value))}
+              required
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Comment
+            </span>
+            <textarea
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
+              placeholder="Optional notes"
             />
           </label>
 

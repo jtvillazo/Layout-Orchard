@@ -6,6 +6,7 @@ import {
   MapText,
   Orchard,
   Project,
+  Row,
   Treatment,
   UUID,
   Vine,
@@ -21,6 +22,7 @@ export interface ProjectData {
   vines?: Vine[];
   mapObjects?: MapObject[];
   mapTexts?: MapText[];
+  rows?: Row[];
 }
 
 const STORAGE_KEY = "layout-orchard-projects";
@@ -163,6 +165,24 @@ export function updateLayoutMapTexts(layoutId: UUID, mapTexts: MapText[]) {
   }
 
   projectData.mapTexts = mapTexts;
+
+  saveProjects(projects);
+
+  return projectData;
+}
+
+export function updateLayoutRows(layoutId: UUID, rows: Row[]) {
+  const projects = readProjects();
+
+  const projectData = projects.find(
+    (item) => item.layout.id === layoutId
+  );
+
+  if (!projectData) {
+    return null;
+  }
+
+  projectData.rows = rows;
 
   saveProjects(projects);
 

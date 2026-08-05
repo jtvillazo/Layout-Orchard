@@ -1,24 +1,23 @@
 import type { MapObject, MapText } from "@/types";
 import type { PixelPoint } from "@/lib/grid-geometry";
 
-const OBJECT_HIT_RADIUS = 18;
-const TEXT_CHAR_WIDTH = 8;
-const TEXT_HEIGHT = 20;
+import { DEFAULT_OBJECT_SIZE } from "@/lib/object-shapes";
+
+export const DEFAULT_LONG_PRESS_MS = 600;
+export const MAP_ELEMENT_LONG_PRESS_MS = 1000;
+
+const TEXT_CHAR_WIDTH = 7;
 
 export function getObjectHitRadius(object: MapObject) {
-  return OBJECT_HIT_RADIUS * (object.scale || 1);
+  return (object.size ?? DEFAULT_OBJECT_SIZE) / 2 + 4;
 }
 
 export function findObjectAtPoint(objects: MapObject[], point: PixelPoint) {
   for (let index = objects.length - 1; index >= 0; index -= 1) {
     const object = objects[index];
-    const radius = getObjectHitRadius(object);
-    const distance = Math.hypot(
-      point.x - object.position.x,
-      point.y - object.position.y
-    );
+    const distance = Math.hypot(point.x - object.x, point.y - object.y);
 
-    if (distance <= radius) {
+    if (distance <= getObjectHitRadius(object)) {
       return object;
     }
   }
@@ -27,12 +26,12 @@ export function findObjectAtPoint(objects: MapObject[], point: PixelPoint) {
 }
 
 export function getTextBounds(text: MapText) {
-  const width = Math.max(40, text.content.length * TEXT_CHAR_WIDTH * text.scale);
-  const height = TEXT_HEIGHT * text.scale;
+  const width = Math.max(32, text.text.length * TEXT_CHAR_WIDTH * (text.fontSize / 14));
+  const height = text.fontSize * 1.4;
 
   return {
-    x: text.position.x - width / 2,
-    y: text.position.y - height / 2,
+    x: text.x - width / 2,
+    y: text.y - height / 2,
     width,
     height,
   };

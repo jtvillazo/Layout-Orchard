@@ -2,30 +2,45 @@
 
 import { FormEvent, useState } from "react";
 
+export interface MapTextFormFields {
+  text: string;
+  fontSize: number;
+  comment?: string;
+}
+
 interface EditTextModalProps {
   mode: "create" | "edit";
-  initialContent?: string;
-  onSave: (content: string) => void;
+  initialValues?: MapTextFormFields;
+  onSave: (fields: MapTextFormFields) => void;
   onCancel: () => void;
 }
 
 export function EditTextModal({
   mode,
-  initialContent = "",
+  initialValues,
   onSave,
   onCancel,
 }: EditTextModalProps) {
-  const [content, setContent] = useState(initialContent);
+  const [text, setText] = useState(initialValues?.text ?? "");
+  const [fontSize, setFontSize] = useState(initialValues?.fontSize ?? 16);
+  const [comment, setComment] = useState(initialValues?.comment ?? "");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const trimmed = content.trim();
-    if (!trimmed) {
+    const trimmedText = text.trim();
+    if (!trimmedText) {
       return;
     }
 
-    onSave(trimmed);
+    const size = Math.max(8, Math.min(120, fontSize));
+    const trimmedComment = comment.trim();
+
+    onSave({
+      text: trimmedText,
+      fontSize: size,
+      ...(trimmedComment ? { comment: trimmedComment } : {}),
+    });
   }
 
   return (
@@ -47,12 +62,40 @@ export function EditTextModal({
             </span>
             <input
               type="text"
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
               autoFocus
               required
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
               placeholder="Pump House"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Font size
+            </span>
+            <input
+              type="number"
+              min={8}
+              max={120}
+              value={fontSize}
+              onChange={(event) => setFontSize(Number(event.target.value))}
+              required
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Comment
+            </span>
+            <textarea
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-base outline-none focus:border-[#66806b] focus:ring-2 focus:ring-[#66806b]/10"
+              placeholder="Optional notes"
             />
           </label>
 

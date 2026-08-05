@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 
-import type { EditTool, PredefinedObjectIcon } from "@/types";
-
-import { OBJECT_TYPE_DEFINITIONS } from "@/lib/object-types";
+import type { EditTool } from "@/types";
 
 interface ToolsMenuProps {
   activeTool: EditTool;
   onSelectTool: (tool: EditTool) => void;
   onCreateGrid: () => void;
-  selectedObjectType: PredefinedObjectIcon;
-  onSelectObjectType: (type: PredefinedObjectIcon) => void;
   className?: string;
 }
 
@@ -19,8 +15,6 @@ export function ToolsMenu({
   activeTool,
   onSelectTool,
   onCreateGrid,
-  selectedObjectType,
-  onSelectObjectType,
   className = "",
 }: ToolsMenuProps) {
   const [expanded, setExpanded] = useState(false);
@@ -87,29 +81,6 @@ export function ToolsMenu({
           >
             Objects
           </button>
-
-          {objectsActive && (
-            <div className="mt-1 space-y-1 rounded-lg border border-blue-100 bg-blue-50/60 p-1.5">
-              {OBJECT_TYPE_DEFINITIONS.map((definition) => {
-                const selected = selectedObjectType === definition.type;
-
-                return (
-                  <button
-                    key={definition.type}
-                    type="button"
-                    onClick={() => onSelectObjectType(definition.type)}
-                    className={`min-h-9 w-full rounded-md px-2 py-1.5 text-left text-[11px] sm:text-xs ${
-                      selected
-                        ? "bg-white font-medium text-[#1e3a8a] shadow-sm"
-                        : "text-gray-700 active:bg-white/70"
-                    }`}
-                  >
-                    {definition.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           <button
             type="button"

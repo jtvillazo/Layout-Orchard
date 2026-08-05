@@ -2,37 +2,119 @@
 
 import type { MouseEvent } from "react";
 import type { Grid, Vine, Treatment } from "@/types";
-import { bayToPixel, BAY_HEIGHT, getRowLineEndpoints, getRowLabelPosition, ROW_SPACING } from "@/lib/grid-geometry";
+import {
+  bayToPixel,
+  BAY_HEIGHT,
+  getRowLineEndpoints,
+  ROW_SPACING,
+} from "@/lib/grid-geometry";
+import { useCanvasUi } from "@/components/layout-editor/canvas-ui-context";
 
 interface GridViewProps {
   grid: Grid;
   vines: Vine[];
   treatments: Treatment[];
-  rowLabels: Record<number, string>; // rowNumber → label asignado (sección 5)
+  rowDisplayNumbers: Record<number, number | null>;
   numberingMode?: boolean;
   showNumberLabels?: boolean;
   duplicateVineIds?: Set<string>;
   onVineClick?: (vine: Vine) => void;
+  onRowNumberHandleClick?: (rowNumber: number) => void;
 }
 
-const UNTREATED_COLOR = "#D1D5DB"; // gris, para vines sin treatment (sección 4: estado default)
+const UNTREATED_COLOR = "#D1D5DB";
 const VINE_RADIUS = 8;
 const LINE_OVERHANG = BAY_HEIGHT * 0.1;
+
+interface RowNumberHandleProps {
+  x: number;
+  y: number;
+  end: "top" | "bottom";
+  displayNumber: number | null;
+  uiScale: number;
+  onClick: () => void;
+}
+
+const ROW_LABEL_ROTATION = -45;
+
+function RowNumberHandle({
+  x,
+  y,
+  end,
+  displayNumber,
+  uiScale,
+  onClick,
+}: RowNumberHandleProps) {
+  const hitRadius = 16 * uiScale;
+  const dotRadius = 7 * uiScale;
+  const fontSize = 30 * uiScale;
+  const labelOffset = dotRadius + 25 * uiScale;
+
+  const handleClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    onClick();
+  };
+
+  // Bottom: end of "Row X" sits near the row start (bottom endpoint).
+  // Top: start of "Row X" sits near the row end (top endpoint).
+  // Both labels share the same -45° tilt along the row direction.
+  const labelX =
+    end === "bottom" ? x + labelOffset : x - labelOffset;
+  const labelY =
+    end === "bottom" ? y + labelOffset : y - labelOffset;
+
+  return (
+    <g
+      data-row-number-handle=""
+      style={{ cursor: "pointer", pointerEvents: "all" }}
+      onClick={handleClick}
+    >
+      <circle cx={x} cy={y} r={hitRadius} fill="transparent" />
+      <circle
+        cx={x}
+        cy={y}
+        r={dotRadius}
+        fill="#E5E7EB"
+        stroke="#9CA3AF"
+        strokeWidth={Math.max(0.75, uiScale * 0.75)}
+      />
+      {displayNumber !== null && (
+        <text
+          x={labelX}
+          y={labelY}
+          textAnchor={end === "bottom" ? "end" : "start"}
+          dominantBaseline="middle"
+          fontSize={fontSize}
+          fontWeight={600}
+          fill="#6B7280"
+          pointerEvents="none"
+          transform={`rotate(${ROW_LABEL_ROTATION}, ${labelX}, ${labelY})`}
+          style={{ userSelect: "none", WebkitUserSelect: "none" }}
+        >
+          {`Row ${displayNumber}`}
+        </text>
+      )}
+    </g>
+  );
+}
 
 export function GridView({
   grid,
   vines,
   treatments,
-  rowLabels,
+  rowDisplayNumbers,
   numberingMode = false,
   showNumberLabels = false,
   duplicateVineIds,
   onVineClick,
+  onRowNumberHandleClick,
 }: GridViewProps) {
+  const { getContentUiScale, viewRevision } = useCanvasUi();
+  const uiScale = getContentUiScale();
+  void viewRevision;
+
   const treatmentById = new Map(treatments.map((t) => [t.id, t]));
 
-  // Agrupamos las vines por bay (mismo row+bay), porque bayToPixel
-  // necesita saber cuántas hay en total ahí para repartir las posiciones
   const vinesByBayKey = new Map<string, Vine[]>();
   vines.forEach((vine) => {
     const key = `${vine.rowNumber}|${vine.bayIndex}`;
@@ -51,13 +133,38 @@ export function GridView({
   const rowStroke = numberingMode ? "#9CA3AF" : "#374151";
   const bayStrokeOpacity = numberingMode ? 0.22 : 0.35;
 
+  const rowHandleNodes =
+    onRowNumberHandleClick &&
+    rowNumbers.map((rowNumber) => {
+      const { bottom, top } = getRowLineEndpoints(grid, rowNumber);
+      const displayNumber = rowDisplayNumbers[rowNumber] ?? null;
+
+      return (
+        <g key={`row-handles-${rowNumber}`}>
+          <RowNumberHandle
+            x={bottom.x}
+            y={bottom.y}
+            end="bottom"
+            displayNumber={displayNumber}
+            uiScale={uiScale}
+            onClick={() => onRowNumberHandleClick(rowNumber)}
+          />
+          <RowNumberHandle
+            x={top.x}
+            y={top.y}
+            end="top"
+            displayNumber={displayNumber}
+            uiScale={uiScale}
+            onClick={() => onRowNumberHandleClick(rowNumber)}
+          />
+        </g>
+      );
+    });
+
   return (
     <g style={{ userSelect: "none", WebkitUserSelect: "none" }}>
-      {/* Líneas de los rows */}
       {rowNumbers.map((rowNumber) => {
         const { bottom, top } = getRowLineEndpoints(grid, rowNumber);
-        const labelPos = getRowLabelPosition(grid, rowNumber);
-        const label = rowLabels[rowNumber];
 
         return (
           <g key={`row-${rowNumber}`}>
@@ -69,26 +176,12 @@ export function GridView({
               stroke={rowStroke}
               strokeWidth={3}
               opacity={numberingMode ? 0.75 : 1}
+              pointerEvents="none"
             />
-            {label && (
-              <text
-                x={labelPos.x}
-                y={labelPos.y}
-                textAnchor="middle"
-                fontSize={14}
-                fontWeight="bold"
-                fill="#374151"
-                pointerEvents="none"
-                style={{ userSelect: "none", WebkitUserSelect: "none" }}
-              >
-                {label}
-              </text>
-            )}
           </g>
         );
       })}
 
-      {/* Vines */}
       {vines.map((vine) => {
         const bayKey = `${vine.rowNumber}|${vine.bayIndex}`;
         const vinesInSameBay = vinesByBayKey.get(bayKey) ?? [vine];
@@ -174,7 +267,6 @@ export function GridView({
         );
       })}
 
-      {/* Separadores transversales entre bays (por encima de las vines) */}
       {baySeparatorYs.map((y, index) => (
         <line
           key={`bay-separator-${index}`}
@@ -188,6 +280,8 @@ export function GridView({
           pointerEvents="none"
         />
       ))}
+
+      {rowHandleNodes}
     </g>
   );
 }

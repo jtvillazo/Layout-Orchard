@@ -10,6 +10,7 @@ import {
   ProjectData,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
+  updateLayoutRows,
   updateLayoutTreatments,
   updateLayoutVines,
 } from "@/lib/project-store";
@@ -19,7 +20,7 @@ import {
   Grid,
   MapObject,
   MapText,
-  PredefinedObjectIcon,
+  Row,
   Treatment,
   UUID,
   Vine,
@@ -30,13 +31,14 @@ function createId(): UUID {
 }
 
 import { Canvas, type CanvasDragIntent } from "@/components/layout-editor/Canvas";
-import { EditObjectModal, type MapObjectEditableFields } from "@/components/layout-editor/EditObjectModal";
-import { EditTextModal } from "@/components/layout-editor/EditTextModal";
+import { EditObjectModal, type MapObjectFormFields } from "@/components/layout-editor/EditObjectModal";
+import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModal";
+import { EditTextModal, type MapTextFormFields } from "@/components/layout-editor/EditTextModal";
 import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
 import { GridView } from "@/components/layout-editor/GridView";
-import { LayoutElementContextPopup } from "@/components/layout-editor/LayoutElementContextPopup";
 import { MapObjectView } from "@/components/layout-editor/MapObjectView";
 import { MapTextView } from "@/components/layout-editor/MapTextView";
+import { ScreenContextPopup } from "@/components/layout-editor/ScreenContextPopup";
 import { TreatmentModal } from "@/components/layout-editor/TreatmentModal";
 import {
   ImportTreatmentsModal,
@@ -44,13 +46,22 @@ import {
 } from "@/components/layout-editor/ImportTreatmentsModal";
 import { TreatmentsMenu } from "@/components/layout-editor/TreatmentsMenu";
 import { ToolsMenu } from "@/components/layout-editor/ToolsMenu";
-import { VineContextPopup } from "@/components/layout-editor/VineContextPopup";
 import { bayToPixel, computeNextGridPosition, pixelToBay } from "@/lib/grid-geometry";
 import type { PixelPoint } from "@/lib/grid-geometry";
 import {
-  DEFAULT_OBJECT_TYPE,
-  getObjectTypeDefinition,
-} from "@/lib/object-types";
+  DEFAULT_LONG_PRESS_MS,
+  findObjectAtPoint,
+  findTextAtPoint,
+  MAP_ELEMENT_LONG_PRESS_MS,
+} from "@/lib/map-elements";
+import { normalizeMapObjects, normalizeMapTexts } from "@/lib/map-normalize";
+import {
+  createRowsForGrid,
+  ensureLayoutRows,
+  findRowHandleAtPoint,
+  getGridRowDisplayNumbers,
+  updateRowDisplayNumber,
+} from "@/lib/row-numbers";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
 import {
   cloneTreatmentsForLayout,
@@ -99,25 +110,36 @@ export function TestGridClient() {
   const [activeTool, setActiveTool] = useState<EditTool>("none");
   const [mapObjects, setMapObjects] = useState<MapObject[]>([]);
   const [mapTexts, setMapTexts] = useState<MapText[]>([]);
-  const [selectedObjectType, setSelectedObjectType] =
-    useState<PredefinedObjectIcon>(DEFAULT_OBJECT_TYPE);
   const [selectedObjectId, setSelectedObjectId] = useState<UUID | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<UUID | null>(null);
-  const [editingObjectId, setEditingObjectId] = useState<UUID | null>(null);
+  const [objectModalState, setObjectModalState] = useState<
+    | { mode: "create"; position: PixelPoint }
+    | { mode: "edit"; objectId: UUID }
+    | null
+  >(null);
   const [textModalState, setTextModalState] = useState<
     | { mode: "create"; position: PixelPoint }
     | { mode: "edit"; textId: UUID }
     | null
   >(null);
+  const [layoutRows, setLayoutRows] = useState<Row[]>([]);
+  const [rowNumberModalState, setRowNumberModalState] = useState<{
+    gridId: UUID;
+    rowNumber: number;
+  } | null>(null);
   const draggingElementRef = useRef<{
     kind: "object" | "text";
     id: UUID;
   } | null>(null);
+  const mapObjectsRef = useRef(mapObjects);
+  const mapTextsRef = useRef(mapTexts);
+  const layoutRowsRef = useRef(layoutRows);
+  mapObjectsRef.current = mapObjects;
+  mapTextsRef.current = mapTexts;
+  layoutRowsRef.current = layoutRows;
   const [layoutLoadState, setLayoutLoadState] = useState<
     "idle" | "loading" | "ready" | "not-found"
   >("idle");
-
-  const rowLabels: Record<number, string> = {};
 
   useEffect(() => {
     if (!layoutId) {
@@ -129,15 +151,17 @@ export function TestGridClient() {
     const data = getLayoutData(layoutId);
 
     if (data) {
+      const grids = data.grids ?? [];
       setProjectData({
         ...data,
-        grids: data.grids ?? [],
+        grids,
       });
 
       setTreatments(data.treatments ?? []);
       setVines(data.vines ?? []);
-      setMapObjects(data.mapObjects ?? []);
-      setMapTexts(data.mapTexts ?? []);
+      setMapObjects(normalizeMapObjects(data.mapObjects ?? []));
+      setMapTexts(normalizeMapTexts(data.mapTexts ?? []));
+      setLayoutRows(ensureLayoutRows(grids, data.rows ?? []));
       setLayoutLoadState("ready");
       return;
     }
@@ -193,12 +217,59 @@ export function TestGridClient() {
       return;
     }
 
+    const newGridRows = createRowsForGrid(newGrid.id, Number(rows), createId);
+    const existingRows = ensureLayoutRows(
+      updatedData.grids ?? [],
+      updatedData.rows ?? layoutRowsRef.current
+    );
+    const nextRows = [...existingRows, ...newGridRows];
+    const saved = updateLayoutRows(layoutId, nextRows);
+
+    setLayoutRows(nextRows);
     setProjectData({
-      ...updatedData,
-      grids: updatedData.grids ?? [],
+      ...(saved ?? updatedData),
+      grids: (saved ?? updatedData).grids ?? [],
+      rows: nextRows,
     });
 
     setShowCreateGrid(false);
+  }
+
+  function persistRows(updatedRows: Row[]) {
+    if (!layoutId) {
+      return;
+    }
+
+    setLayoutRows(updatedRows);
+    const saved = updateLayoutRows(layoutId, updatedRows);
+    if (saved) {
+      setProjectData((current) =>
+        current ? { ...current, rows: updatedRows } : current
+      );
+    }
+  }
+
+  function handleSaveRowDisplayNumber(displayNumber: number | null) {
+    if (!rowNumberModalState) {
+      return;
+    }
+
+    const updatedRows = updateRowDisplayNumber(
+      layoutRowsRef.current,
+      rowNumberModalState.gridId,
+      rowNumberModalState.rowNumber,
+      displayNumber
+    );
+
+    persistRows(updatedRows);
+    setRowNumberModalState(null);
+  }
+
+  function handleRowNumberHandleClick(gridId: UUID, rowNumber: number) {
+    setRowNumberModalState({ gridId, rowNumber });
+    setSelectedVineId(null);
+    setSelectedObjectId(null);
+    setSelectedTextId(null);
   }
 
   function persistVines(updatedVines: Vine[]) {
@@ -243,55 +314,55 @@ export function TestGridClient() {
     }
   }
 
-  function handleCreateObjectAtPoint(point: PixelPoint) {
+  function handleCreateObject(fields: MapObjectFormFields, position: PixelPoint) {
     if (!layoutId) {
       return;
     }
 
-    const definition = getObjectTypeDefinition(selectedObjectType);
     const newObject: MapObject = {
       id: createId(),
       layoutId,
-      kind: "icon",
-      icon: selectedObjectType,
-      text: definition.name,
-      color: definition.placeholderColor,
-      position: { x: point.x, y: point.y },
-      rotation: 0,
-      scale: 1,
-      layer: 2,
+      x: position.x,
+      y: position.y,
+      name: fields.name,
+      shape: fields.shape,
+      color: fields.color,
+      size: fields.size,
+      ...(fields.comment ? { comment: fields.comment } : {}),
     };
 
     persistMapObjects([...mapObjects, newObject]);
     setSelectedObjectId(newObject.id);
     setSelectedTextId(null);
     setSelectedVineId(null);
+    setObjectModalState(null);
   }
 
-  function handleDeleteObject(objectId: UUID) {
-    persistMapObjects(mapObjects.filter((object) => object.id !== objectId));
-    setSelectedObjectId(null);
-    setEditingObjectId(null);
-  }
-
-  function handleSaveObject(objectId: UUID, updates: MapObjectEditableFields) {
+  function handleSaveObject(objectId: UUID, fields: MapObjectFormFields) {
     persistMapObjects(
       mapObjects.map((object) =>
         object.id === objectId
           ? {
               ...object,
-              text: updates.name || undefined,
-              icon: updates.icon,
-              scale: updates.scale,
-              color: updates.color,
+              name: fields.name,
+              shape: fields.shape,
+              color: fields.color,
+              size: fields.size,
+              comment: fields.comment,
             }
           : object
       )
     );
-    setEditingObjectId(null);
+    setObjectModalState(null);
   }
 
-  function handleCreateText(content: string, position: PixelPoint) {
+  function handleDeleteObject(objectId: UUID) {
+    persistMapObjects(mapObjects.filter((object) => object.id !== objectId));
+    setSelectedObjectId(null);
+    setObjectModalState(null);
+  }
+
+  function handleCreateText(fields: MapTextFormFields, position: PixelPoint) {
     if (!layoutId) {
       return;
     }
@@ -299,11 +370,11 @@ export function TestGridClient() {
     const newText: MapText = {
       id: createId(),
       layoutId,
-      content,
-      position: { x: position.x, y: position.y },
-      rotation: 0,
-      scale: 1,
-      layer: 2,
+      x: position.x,
+      y: position.y,
+      text: fields.text,
+      fontSize: fields.fontSize,
+      ...(fields.comment ? { comment: fields.comment } : {}),
     };
 
     persistMapTexts([...mapTexts, newText]);
@@ -313,10 +384,17 @@ export function TestGridClient() {
     setTextModalState(null);
   }
 
-  function handleSaveText(textId: UUID, content: string) {
+  function handleSaveText(textId: UUID, fields: MapTextFormFields) {
     persistMapTexts(
       mapTexts.map((text) =>
-        text.id === textId ? { ...text, content } : text
+        text.id === textId
+          ? {
+              ...text,
+              text: fields.text,
+              fontSize: fields.fontSize,
+              comment: fields.comment,
+            }
+          : text
       )
     );
     setTextModalState(null);
@@ -423,7 +501,15 @@ export function TestGridClient() {
     _clientY: number,
     contentPoint: PixelPoint | null
   ) {
+    if (target?.closest("[data-screen-context-popup]")) {
+      return;
+    }
+
     if (target?.closest("[data-layout-element-popup]")) {
+      return;
+    }
+
+    if (target?.closest("[data-row-number-handle]")) {
       return;
     }
 
@@ -431,9 +517,8 @@ export function TestGridClient() {
       if (target?.closest("[data-map-object-id]")) {
         return;
       }
-      if (contentPoint) {
-        handleCreateObjectAtPoint(contentPoint);
-      }
+      setSelectedObjectId(null);
+      setSelectedVineId(null);
       return;
     }
 
@@ -441,11 +526,8 @@ export function TestGridClient() {
       if (target?.closest("[data-map-text-id]")) {
         return;
       }
-      if (contentPoint) {
-        setSelectedObjectId(null);
-        setSelectedVineId(null);
-        setTextModalState({ mode: "create", position: contentPoint });
-      }
+      setSelectedTextId(null);
+      setSelectedVineId(null);
       return;
     }
 
@@ -474,7 +556,7 @@ export function TestGridClient() {
     setSelectedVineId(null);
     setSelectedObjectId(null);
     setSelectedTextId(null);
-    setEditingObjectId(null);
+    setObjectModalState(null);
     setTextModalState(null);
     setActiveTool(tool);
 
@@ -548,42 +630,60 @@ export function TestGridClient() {
     setSelectedVineId(null);
   }
 
+  function beginObjectDrag(objectId: UUID) {
+    draggingElementRef.current = { kind: "object", id: objectId };
+    setSelectedObjectId(objectId);
+    setSelectedTextId(null);
+    setSelectedVineId(null);
+  }
+
+  function beginTextDrag(textId: UUID) {
+    draggingElementRef.current = { kind: "text", id: textId };
+    setSelectedTextId(textId);
+    setSelectedObjectId(null);
+    setSelectedVineId(null);
+  }
+
+  function tryBeginMapElementDragFromPoint(point: PixelPoint): boolean {
+    const hitObject = findObjectAtPoint(mapObjectsRef.current, point);
+    if (hitObject) {
+      beginObjectDrag(hitObject.id);
+      return true;
+    }
+
+    const hitText = findTextAtPoint(mapTextsRef.current, point);
+    if (hitText) {
+      beginTextDrag(hitText.id);
+      return true;
+    }
+
+    return false;
+  }
+
+  function getMapElementLongPressDuration(point: PixelPoint | null) {
+    if (!point) {
+      return DEFAULT_LONG_PRESS_MS;
+    }
+
+    if (findObjectAtPoint(mapObjectsRef.current, point)) {
+      return MAP_ELEMENT_LONG_PRESS_MS;
+    }
+
+    if (findTextAtPoint(mapTextsRef.current, point)) {
+      return MAP_ELEMENT_LONG_PRESS_MS;
+    }
+
+    return DEFAULT_LONG_PRESS_MS;
+  }
+
   function handleCanvasDragIntent(
-    target: Element | null,
+    _target: Element | null,
     _clientX: number,
     _clientY: number,
-    contentPoint: PixelPoint | null
+    _contentPoint: PixelPoint | null
   ): CanvasDragIntent {
-    if (!contentPoint) {
-      return "pan";
-    }
-
-    if (activeTool === "createObject") {
-      const objectId = target
-        ?.closest("[data-map-object-id]")
-        ?.getAttribute("data-map-object-id");
-
-      if (objectId) {
-        draggingElementRef.current = { kind: "object", id: objectId };
-        setSelectedObjectId(objectId);
-        setSelectedTextId(null);
-        setSelectedVineId(null);
-        return "element";
-      }
-    }
-
-    if (activeTool === "createText") {
-      const textId = target
-        ?.closest("[data-map-text-id]")
-        ?.getAttribute("data-map-text-id");
-
-      if (textId) {
-        draggingElementRef.current = { kind: "text", id: textId };
-        setSelectedTextId(textId);
-        setSelectedObjectId(null);
-        setSelectedVineId(null);
-        return "element";
-      }
+    if (draggingElementRef.current) {
+      return "element";
     }
 
     return "pan";
@@ -596,27 +696,45 @@ export function TestGridClient() {
     }
 
     if (dragging.kind === "object") {
-      persistMapObjects(
-        mapObjects.map((object) =>
-          object.id === dragging.id
-            ? { ...object, position: { x: contentPoint.x, y: contentPoint.y } }
-            : object
-        )
+      const updatedObjects = mapObjectsRef.current.map((object) =>
+        object.id === dragging.id
+          ? { ...object, x: contentPoint.x, y: contentPoint.y }
+          : object
       );
+      mapObjectsRef.current = updatedObjects;
+      setMapObjects(updatedObjects);
       return;
     }
 
-    persistMapTexts(
-      mapTexts.map((text) =>
-        text.id === dragging.id
-          ? { ...text, position: { x: contentPoint.x, y: contentPoint.y } }
-          : text
-      )
+    const updatedTexts = mapTextsRef.current.map((text) =>
+      text.id === dragging.id
+        ? { ...text, x: contentPoint.x, y: contentPoint.y }
+        : text
     );
+    mapTextsRef.current = updatedTexts;
+    setMapTexts(updatedTexts);
   }
 
   function handleCanvasElementDragEnd() {
+    const dragging = draggingElementRef.current;
     draggingElementRef.current = null;
+
+    if (!dragging) {
+      return;
+    }
+
+    if (dragging.kind === "object") {
+      persistMapObjects(mapObjectsRef.current);
+      if (activeTool !== "createObject") {
+        setSelectedObjectId(null);
+      }
+      return;
+    }
+
+    persistMapTexts(mapTextsRef.current);
+    if (activeTool !== "createText") {
+      setSelectedTextId(null);
+    }
   }
 
   const grids = projectData?.grids ?? [];
@@ -631,6 +749,62 @@ export function TestGridClient() {
   const textsModeActive = activeTool === "createText";
   const showNumberLabels = layoutHasNumbering(layoutVines);
   const duplicateVineIds = findAllDuplicateVineIds(layoutVines);
+
+  function handleLongPress(
+    _clientX: number,
+    _clientY: number,
+    point: PixelPoint | null
+  ): boolean {
+    if (!point) {
+      return false;
+    }
+
+    if (findRowHandleAtPoint(grids, point)) {
+      return false;
+    }
+
+    if (activeTool === "numbering") {
+      const hitVine = findVineAtPoint(layoutVines, grids, point);
+      if (hitVine) {
+        handleNumberingLongPress(hitVine);
+      }
+      return false;
+    }
+
+    if (tryBeginMapElementDragFromPoint(point)) {
+      return true;
+    }
+
+    if (activeTool === "createObject") {
+      setSelectedObjectId(null);
+      setSelectedVineId(null);
+      setObjectModalState({ mode: "create", position: point });
+      return false;
+    }
+
+    if (activeTool === "createText") {
+      setSelectedObjectId(null);
+      setSelectedTextId(null);
+      setSelectedVineId(null);
+      setTextModalState({ mode: "create", position: point });
+      return false;
+    }
+
+    if (grids.length === 0) {
+      return false;
+    }
+
+    for (const grid of grids) {
+      const hit = pixelToBay(grid, point);
+      if (hit) {
+        handleCreateVineAtBay(grid, hit.rowNumber, hit.bayIndex);
+        break;
+      }
+    }
+
+    return false;
+  }
+
   const importLayoutOptions: ImportLayoutOption[] = layoutId
     ? getAllProjects()
         .filter((project) => project.layout.id !== layoutId)
@@ -704,8 +878,10 @@ export function TestGridClient() {
     setSelectedTreatmentMenuId(null);
     setDeleteTreatmentWarning(null);
   }
-  const editingObject =
-    mapObjects.find((object) => object.id === editingObjectId) ?? null;
+  const objectModalEditTarget =
+    objectModalState?.mode === "edit"
+      ? mapObjects.find((object) => object.id === objectModalState.objectId) ?? null
+      : null;
   const selectedObject =
     mapObjects.find((object) => object.id === selectedObjectId) ?? null;
   const selectedText =
@@ -773,8 +949,6 @@ export function TestGridClient() {
                 activeTool={activeTool}
                 onSelectTool={handleSelectTool}
                 onCreateGrid={() => setShowCreateGrid(true)}
-                selectedObjectType={selectedObjectType}
-                onSelectObjectType={setSelectedObjectType}
                 className="pointer-events-auto"
               />
             )}
@@ -874,31 +1048,51 @@ export function TestGridClient() {
         getDragIntent={handleCanvasDragIntent}
         onElementDrag={handleCanvasElementDrag}
         onElementDragEnd={handleCanvasElementDragEnd}
-        onLongPress={(_clientX, _clientY, point) => {
-          if (activeTool === "createObject" || activeTool === "createText") {
-            return;
-          }
+        onLongPress={handleLongPress}
+        getLongPressDuration={getMapElementLongPressDuration}
+        screenOverlay={
+          <>
+            {selectedObject && objectsModeActive && (
+              <ScreenContextPopup
+                anchorContentX={selectedObject.x}
+                anchorContentY={selectedObject.y}
+                layoutPopupAttribute="object"
+                onEdit={() => {
+                  setObjectModalState({ mode: "edit", objectId: selectedObject.id });
+                  setSelectedObjectId(null);
+                }}
+                onDelete={() => handleDeleteObject(selectedObject.id)}
+              />
+            )}
 
-          if (!point || grids.length === 0) {
-            return;
-          }
+            {selectedText && textsModeActive && (
+              <ScreenContextPopup
+                anchorContentX={selectedText.x}
+                anchorContentY={selectedText.y}
+                layoutPopupAttribute="text"
+                onEdit={() => {
+                  setTextModalState({ mode: "edit", textId: selectedText.id });
+                  setSelectedTextId(null);
+                }}
+                onDelete={() => handleDeleteText(selectedText.id)}
+              />
+            )}
 
-          if (numberingModeActive) {
-            const hitVine = findVineAtPoint(layoutVines, grids, point);
-            if (hitVine) {
-              handleNumberingLongPress(hitVine);
-            }
-            return;
-          }
-
-          for (const grid of grids) {
-            const hit = pixelToBay(grid, point);
-            if (hit) {
-              handleCreateVineAtBay(grid, hit.rowNumber, hit.bayIndex);
-              return;
-            }
-          }
-        }}
+            {selectedVine &&
+              selectedVineAnchor &&
+              !numberingModeActive &&
+              !objectsModeActive &&
+              !textsModeActive && (
+                <ScreenContextPopup
+                  anchorContentX={selectedVineAnchor.x}
+                  anchorContentY={selectedVineAnchor.y}
+                  vinePopup
+                  onEdit={() => handleEditVine(selectedVine)}
+                  onDelete={() => handleDeleteVine(selectedVine.id)}
+                />
+              )}
+          </>
+        }
       >
         {grids.length > 0 ? (
           grids.map((grid) => (
@@ -907,11 +1101,14 @@ export function TestGridClient() {
               grid={grid}
               vines={vines.filter((vine) => vine.gridId === grid.id)}
               treatments={treatments}
-              rowLabels={rowLabels}
+              rowDisplayNumbers={getGridRowDisplayNumbers(grid.id, layoutRows)}
               numberingMode={numberingModeActive}
               showNumberLabels={showNumberLabels}
               duplicateVineIds={duplicateVineIds}
               onVineClick={handleVineClick}
+              onRowNumberHandleClick={(rowNumber) =>
+                handleRowNumberHandleClick(grid.id, rowNumber)
+              }
             />
           ))
         ) : (
@@ -965,48 +1162,24 @@ export function TestGridClient() {
             onTextClick={handleTextClick}
           />
         ))}
-
-        {selectedObject && objectsModeActive && (
-          <LayoutElementContextPopup
-            anchorX={selectedObject.position.x}
-            anchorY={selectedObject.position.y}
-            dataAttribute="object"
-            onEdit={() => {
-              setEditingObjectId(selectedObject.id);
-              setSelectedObjectId(null);
-            }}
-            onDelete={() => handleDeleteObject(selectedObject.id)}
-          />
-        )}
-
-        {selectedText && textsModeActive && (
-          <LayoutElementContextPopup
-            anchorX={selectedText.position.x}
-            anchorY={selectedText.position.y}
-            dataAttribute="text"
-            onEdit={() => {
-              setTextModalState({ mode: "edit", textId: selectedText.id });
-              setSelectedTextId(null);
-            }}
-            onDelete={() => handleDeleteText(selectedText.id)}
-          />
-        )}
-
-        {selectedVine && selectedVineAnchor && !numberingModeActive && !objectsModeActive && !textsModeActive && (
-          <VineContextPopup
-            anchorX={selectedVineAnchor.x}
-            anchorY={selectedVineAnchor.y}
-            onEdit={() => handleEditVine(selectedVine)}
-            onDelete={() => handleDeleteVine(selectedVine.id)}
-          />
-        )}
       </Canvas>
 
-      {editingObject && (
+      {objectModalState?.mode === "create" && (
         <EditObjectModal
-          object={editingObject}
-          onCancel={() => setEditingObjectId(null)}
-          onSave={(updates) => handleSaveObject(editingObject.id, updates)}
+          mode="create"
+          onCancel={() => setObjectModalState(null)}
+          onSave={(fields) =>
+            handleCreateObject(fields, objectModalState.position)
+          }
+        />
+      )}
+
+      {objectModalState?.mode === "edit" && objectModalEditTarget && (
+        <EditObjectModal
+          mode="edit"
+          initialValues={objectModalEditTarget}
+          onCancel={() => setObjectModalState(null)}
+          onSave={(fields) => handleSaveObject(objectModalEditTarget.id, fields)}
         />
       )}
 
@@ -1014,18 +1187,34 @@ export function TestGridClient() {
         <EditTextModal
           mode="create"
           onCancel={() => setTextModalState(null)}
-          onSave={(content) =>
-            handleCreateText(content, textModalState.position)
-          }
+          onSave={(fields) => handleCreateText(fields, textModalState.position)}
         />
       )}
 
       {textModalState?.mode === "edit" && editingText && (
         <EditTextModal
           mode="edit"
-          initialContent={editingText.content}
+          initialValues={{
+            text: editingText.text,
+            fontSize: editingText.fontSize,
+            comment: editingText.comment,
+          }}
           onCancel={() => setTextModalState(null)}
-          onSave={(content) => handleSaveText(editingText.id, content)}
+          onSave={(fields) => handleSaveText(editingText.id, fields)}
+        />
+      )}
+
+      {rowNumberModalState && (
+        <EditRowNumberModal
+          initialValue={
+            layoutRows.find(
+              (row) =>
+                row.gridId === rowNumberModalState.gridId &&
+                row.index === rowNumberModalState.rowNumber
+            )?.displayNumber ?? null
+          }
+          onCancel={() => setRowNumberModalState(null)}
+          onSave={handleSaveRowDisplayNumber}
         />
       )}
 

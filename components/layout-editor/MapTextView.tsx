@@ -2,6 +2,12 @@
 
 import type { MapText } from "@/types";
 
+import { getTextBounds } from "@/lib/map-elements";
+import {
+  getLabelBackgroundBounds,
+  LABEL_BG_OPACITY,
+} from "@/lib/label-background";
+
 interface MapTextViewProps {
   text: MapText;
   selected: boolean;
@@ -9,7 +15,14 @@ interface MapTextViewProps {
 }
 
 export function MapTextView({ text, selected, onTextClick }: MapTextViewProps) {
-  const fontSize = 14 * text.scale;
+  const bounds = getTextBounds(text);
+  const labelBg = getLabelBackgroundBounds(
+    text.x,
+    text.y,
+    text.text,
+    text.fontSize,
+    "middle"
+  );
 
   return (
     <g
@@ -23,10 +36,10 @@ export function MapTextView({ text, selected, onTextClick }: MapTextViewProps) {
     >
       {selected && (
         <rect
-          x={text.position.x - (text.content.length * 4 + 12) * text.scale}
-          y={text.position.y - fontSize * 0.75}
-          width={Math.max(48, text.content.length * 8 + 24) * text.scale}
-          height={fontSize * 1.5}
+          x={bounds.x - 4}
+          y={bounds.y - 4}
+          width={bounds.width + 8}
+          height={bounds.height + 8}
           rx={4}
           fill="none"
           stroke="#2f4034"
@@ -36,16 +49,28 @@ export function MapTextView({ text, selected, onTextClick }: MapTextViewProps) {
         />
       )}
 
+      <rect
+        x={labelBg.x}
+        y={labelBg.y}
+        width={labelBg.width}
+        height={labelBg.height}
+        rx={labelBg.rx}
+        fill="#FFFFFF"
+        fillOpacity={LABEL_BG_OPACITY}
+        pointerEvents="none"
+      />
+
       <text
-        x={text.position.x}
-        y={text.position.y}
+        x={text.x}
+        y={text.y}
         textAnchor="middle"
-        fontSize={fontSize}
+        dominantBaseline="middle"
+        fontSize={text.fontSize}
         fontWeight="600"
         fill="#1F2937"
         pointerEvents="all"
       >
-        {text.content || "Text"}
+        {text.text}
       </text>
     </g>
   );
