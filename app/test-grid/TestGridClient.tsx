@@ -168,6 +168,7 @@ export function TestGridClient() {
   const [exportJpgIncludeLegend, setExportJpgIncludeLegend] = useState(true);
   const [exportJpgIncludeLayoutInfo, setExportJpgIncludeLayoutInfo] =
     useState(false);
+  const [exportJpgShowGridPoints, setExportJpgShowGridPoints] = useState(true);
   const [exportJpgExporting, setExportJpgExporting] = useState(false);
   const exportJpgContentGroupRef = useRef<SVGGElement | null>(null);
 
@@ -606,6 +607,7 @@ export function TestGridClient() {
     setTextModalState(null);
     setExportJpgIncludeLegend(true);
     setExportJpgIncludeLayoutInfo(false);
+    setExportJpgShowGridPoints(true);
     setExportJpgSelection(null);
     setExportJpgModeActive(true);
   }
@@ -641,6 +643,7 @@ export function TestGridClient() {
         filename,
         includeLegend: exportJpgIncludeLegend,
         includeLayoutInfo: exportJpgIncludeLayoutInfo,
+        showGridPoints: exportJpgShowGridPoints,
         projectName: projectData.project.name,
         projectLeader: projectData.project.projectLeader,
         orchardName: projectData.orchard.name,
@@ -1371,10 +1374,12 @@ export function TestGridClient() {
           defaultFilename={projectData.project.name}
           includeLegend={exportJpgIncludeLegend}
           includeLayoutInfo={exportJpgIncludeLayoutInfo}
+          showGridPoints={exportJpgShowGridPoints}
           canExport={exportJpgSelection !== null}
           exporting={exportJpgExporting}
           onIncludeLegendChange={setExportJpgIncludeLegend}
           onIncludeLayoutInfoChange={setExportJpgIncludeLayoutInfo}
+          onShowGridPointsChange={setExportJpgShowGridPoints}
           onCancel={handleCancelExportJpgMode}
           onExport={handleExportJpg}
         />

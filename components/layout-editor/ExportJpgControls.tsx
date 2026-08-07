@@ -6,10 +6,12 @@ interface ExportJpgControlsProps {
   defaultFilename: string;
   includeLegend: boolean;
   includeLayoutInfo: boolean;
+  showGridPoints: boolean;
   canExport: boolean;
   exporting: boolean;
   onIncludeLegendChange: (value: boolean) => void;
   onIncludeLayoutInfoChange: (value: boolean) => void;
+  onShowGridPointsChange: (value: boolean) => void;
   onCancel: () => void;
   onExport: (filename: string) => void;
 }
@@ -18,10 +20,12 @@ export function ExportJpgControls({
   defaultFilename,
   includeLegend,
   includeLayoutInfo,
+  showGridPoints,
   canExport,
   exporting,
   onIncludeLegendChange,
   onIncludeLayoutInfoChange,
+  onShowGridPointsChange,
   onCancel,
   onExport,
 }: ExportJpgControlsProps) {
@@ -61,6 +65,16 @@ export function ExportJpgControls({
             <span className="text-sm text-gray-800">
               Include Layout Information
             </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={showGridPoints}
+              onChange={(event) => onShowGridPointsChange(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#2f4034] focus:ring-[#66806b]"
+            />
+            <span className="text-sm text-gray-800">Show Grid Points</span>
           </label>
 
           <label className="block pt-1">
