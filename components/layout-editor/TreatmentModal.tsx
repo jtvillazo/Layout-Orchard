@@ -27,7 +27,20 @@ export function TreatmentModal({
   const [labelName, setLabelName] = useState(treatment?.labelName ?? "");
   const [color, setColor] = useState(treatment?.color ?? "#22C55E");
   const [color2, setColor2] = useState(treatment?.color2 ?? "");
+  const [showColor2, setShowColor2] = useState(Boolean(treatment?.color2));
   const [comment, setComment] = useState(treatment?.comment ?? "");
+
+  function handleAddSecondColor() {
+    setShowColor2(true);
+    if (!color2.trim()) {
+      setColor2("#3B82F6");
+    }
+  }
+
+  function handleRemoveSecondColor() {
+    setShowColor2(false);
+    setColor2("");
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,13 +49,16 @@ export function TreatmentModal({
     const trimmedLabel = labelName.trim();
     if (!trimmedName || !trimmedLabel) return;
 
+    const secondColor =
+      showColor2 && color2.trim() ? color2.trim() : undefined;
+
     const savedTreatment: Treatment = isEdit
       ? {
           ...treatment,
           name: trimmedName,
           labelName: trimmedLabel,
           color,
-          ...(color2.trim() ? { color2: color2.trim() } : {}),
+          ...(secondColor ? { color2: secondColor } : {}),
           ...(comment.trim() ? { comment: comment.trim() } : {}),
         }
       : {
@@ -51,7 +67,7 @@ export function TreatmentModal({
           name: trimmedName,
           labelName: trimmedLabel,
           color,
-          ...(color2.trim() ? { color2: color2.trim() } : {}),
+          ...(secondColor ? { color2: secondColor } : {}),
           ...(comment.trim() ? { comment: comment.trim() } : {}),
         };
 
@@ -59,7 +75,7 @@ export function TreatmentModal({
       delete savedTreatment.comment;
     }
 
-    if (isEdit && !color2.trim()) {
+    if (!showColor2 || !color2.trim()) {
       delete savedTreatment.color2;
     }
 
@@ -107,10 +123,10 @@ export function TreatmentModal({
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Color 1
-            </span>
+          <div className="block">
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              {showColor2 ? "Color 1" : "Color"}
+            </label>
             <div className="flex items-center gap-3">
               <input
                 type="color"
@@ -120,33 +136,39 @@ export function TreatmentModal({
               />
               <span className="text-sm text-gray-500">{color}</span>
             </div>
-          </label>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Color 2
-            </span>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={color2 || "#3B82F6"}
-                onChange={(event) => setColor2(event.target.value)}
-                className="h-11 w-14 cursor-pointer rounded-lg border border-gray-200 bg-white"
-              />
-              <span className="text-sm text-gray-500">
-                {color2 || "Optional"}
-              </span>
-              {color2 && (
-                <button
-                  type="button"
-                  onClick={() => setColor2("")}
-                  className="text-sm font-medium text-gray-500 underline"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </label>
+            {!showColor2 ? (
+              <button
+                type="button"
+                onClick={handleAddSecondColor}
+                className="mt-2 text-sm font-medium text-[#66806b] underline"
+              >
+                Add 2nd color
+              </button>
+            ) : (
+              <div className="mt-4">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Color 2
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={color2 || "#3B82F6"}
+                    onChange={(event) => setColor2(event.target.value)}
+                    className="h-11 w-14 cursor-pointer rounded-lg border border-gray-200 bg-white"
+                  />
+                  <span className="text-sm text-gray-500">{color2}</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSecondColor}
+                    className="text-sm font-medium text-gray-500 underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
