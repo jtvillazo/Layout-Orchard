@@ -12,10 +12,16 @@ declare const self: ServiceWorkerGlobalScope;
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
+
+  precacheOptions: {
+    ignoreURLParametersMatching: [/^layoutId$/],
+  },
+
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: defaultCache,
+
   fallbacks: {
     entries: [
       {
