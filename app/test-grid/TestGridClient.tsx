@@ -35,6 +35,8 @@ import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModa
 import { EditTextModal, type MapTextFormFields } from "@/components/layout-editor/EditTextModal";
 import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
 import { ExportLayoutModal } from "@/components/layout-editor/ExportLayoutModal";
+import { ExportJpgCanvasTools } from "@/components/layout-editor/ExportJpgCanvasTools";
+import { ExportJpgControls } from "@/components/layout-editor/ExportJpgControls";
 import {
   EditLayoutModal,
   formValuesToMetadataUpdate,
@@ -71,6 +73,12 @@ import {
   updateRowDisplayNumber,
 } from "@/lib/row-numbers";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
+import {
+  exportLayoutToJpeg,
+  getTreatmentsForVines,
+  getVinesInContentRect,
+} from "@/lib/export-jpg";
+import type { ContentRect } from "@/lib/content-rect";
 import type { LayoutFormValues } from "@/components/layout/LayoutForm";
 import {
   cloneTreatmentsForLayout,
@@ -153,6 +161,15 @@ export function TestGridClient() {
   const [layoutInfoMenuOpen, setLayoutInfoMenuOpen] = useState(false);
   const [showEditLayout, setShowEditLayout] = useState(false);
   const [showExportLayout, setShowExportLayout] = useState(false);
+  const [exportJpgModeActive, setExportJpgModeActive] = useState(false);
+  const [exportJpgSelection, setExportJpgSelection] = useState<ContentRect | null>(
+    null
+  );
+  const [exportJpgIncludeLegend, setExportJpgIncludeLegend] = useState(true);
+  const [exportJpgIncludeLayoutInfo, setExportJpgIncludeLayoutInfo] =
+    useState(false);
+  const [exportJpgExporting, setExportJpgExporting] = useState(false);
+  const exportJpgContentGroupRef = useRef<SVGGElement | null>(null);
 
   useEffect(() => {
     if (!layoutId) {
@@ -580,12 +597,76 @@ export function TestGridClient() {
     setDeleteTreatmentWarning(null);
   }
 
+  function handleEnterExportJpgMode() {
+    setActiveTool("none");
+    setSelectedVineId(null);
+    setSelectedObjectId(null);
+    setSelectedTextId(null);
+    setObjectModalState(null);
+    setTextModalState(null);
+    setExportJpgIncludeLegend(true);
+    setExportJpgIncludeLayoutInfo(false);
+    setExportJpgSelection(null);
+    setExportJpgModeActive(true);
+  }
+
+  function handleCancelExportJpgMode() {
+    setExportJpgModeActive(false);
+    setExportJpgSelection(null);
+    setExportJpgExporting(false);
+    exportJpgContentGroupRef.current = null;
+  }
+
+  async function handleExportJpg(filename: string) {
+    if (!exportJpgSelection || !exportJpgContentGroupRef.current || !projectData) {
+      return;
+    }
+
+    setExportJpgExporting(true);
+
+    try {
+      const vinesInArea = getVinesInContentRect(
+        layoutVines,
+        grids,
+        exportJpgSelection
+      );
+      const legendTreatments = getTreatmentsForVines(
+        layoutTreatments,
+        vinesInArea
+      );
+
+      await exportLayoutToJpeg({
+        contentGroup: exportJpgContentGroupRef.current,
+        bounds: exportJpgSelection,
+        filename,
+        includeLegend: exportJpgIncludeLegend,
+        includeLayoutInfo: exportJpgIncludeLayoutInfo,
+        projectName: projectData.project.name,
+        projectLeader: projectData.project.projectLeader,
+        orchardName: projectData.orchard.name,
+        variety: projectData.project.variety,
+        treatments: legendTreatments,
+      });
+
+      handleCancelExportJpgMode();
+    } catch (error) {
+      console.error("[export-jpg] Failed to export layout", error);
+      window.alert("Failed to export JPG. Please try again.");
+    } finally {
+      setExportJpgExporting(false);
+    }
+  }
+
   function handleSurfaceClick(
     target: Element | null,
     _clientX: number,
     _clientY: number,
     contentPoint: PixelPoint | null
   ) {
+    if (exportJpgModeActive) {
+      return;
+    }
+
     if (target?.closest("[data-screen-context-popup]")) {
       return;
     }
@@ -767,6 +848,10 @@ export function TestGridClient() {
     _clientY: number,
     _contentPoint: PixelPoint | null
   ): CanvasDragIntent {
+    if (exportJpgModeActive) {
+      return "pan";
+    }
+
     if (draggingElementRef.current) {
       return "element";
     }
@@ -841,6 +926,10 @@ export function TestGridClient() {
     _clientY: number,
     point: PixelPoint | null
   ): boolean {
+    if (exportJpgModeActive) {
+      return false;
+    }
+
     if (!point) {
       return false;
     }
@@ -1039,6 +1128,8 @@ export function TestGridClient() {
                 onSelectTool={handleSelectTool}
                 onCreateGrid={() => setShowCreateGrid(true)}
                 onExport={() => setShowExportLayout(true)}
+                onExportJpg={handleEnterExportJpgMode}
+                exportJpgActive={exportJpgModeActive}
                 className="pointer-events-auto"
               />
             )}
@@ -1074,6 +1165,14 @@ export function TestGridClient() {
           )}
         </div>
       </div>
+
+      {exportJpgModeActive && (
+        <div className="pointer-events-none absolute left-1/2 top-[7.5rem] z-50 max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-full border border-[#66806b]/30 bg-white/95 px-3 py-1.5 shadow-md sm:top-28 sm:px-4 sm:py-2 md:max-w-[calc(100%-4rem)] lg:top-4">
+          <p className="pointer-events-auto text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#2f4034] sm:text-xs sm:tracking-[0.18em]">
+            Export JPG Mode
+          </p>
+        </div>
+      )}
 
       {numberingModeActive && (
         <div
@@ -1140,9 +1239,21 @@ export function TestGridClient() {
         onElementDragEnd={handleCanvasElementDragEnd}
         onLongPress={handleLongPress}
         getLongPressDuration={getMapElementLongPressDuration}
+        layoutInteractionDisabled={exportJpgModeActive}
+        hideResetButton={exportJpgModeActive}
+        exportOverlay={
+          exportJpgModeActive ? (
+            <ExportJpgCanvasTools
+              key="export-jpg-tools"
+              selection={exportJpgSelection}
+              onSelectionChange={setExportJpgSelection}
+              contentGroupRef={exportJpgContentGroupRef}
+            />
+          ) : undefined
+        }
         screenOverlay={
           <>
-            {selectedObject && objectsModeActive && (
+            {!exportJpgModeActive && selectedObject && objectsModeActive && (
               <ScreenContextPopup
                 anchorContentX={selectedObject.x}
                 anchorContentY={selectedObject.y}
@@ -1155,7 +1266,7 @@ export function TestGridClient() {
               />
             )}
 
-            {selectedText && textsModeActive && (
+            {!exportJpgModeActive && selectedText && textsModeActive && (
               <ScreenContextPopup
                 anchorContentX={selectedText.x}
                 anchorContentY={selectedText.y}
@@ -1168,7 +1279,8 @@ export function TestGridClient() {
               />
             )}
 
-            {selectedVine &&
+            {!exportJpgModeActive &&
+              selectedVine &&
               selectedVineAnchor &&
               !numberingModeActive &&
               !objectsModeActive &&
@@ -1253,6 +1365,20 @@ export function TestGridClient() {
           />
         ))}
       </Canvas>
+
+      {exportJpgModeActive && projectData && (
+        <ExportJpgControls
+          defaultFilename={projectData.project.name}
+          includeLegend={exportJpgIncludeLegend}
+          includeLayoutInfo={exportJpgIncludeLayoutInfo}
+          canExport={exportJpgSelection !== null}
+          exporting={exportJpgExporting}
+          onIncludeLegendChange={setExportJpgIncludeLegend}
+          onIncludeLayoutInfoChange={setExportJpgIncludeLayoutInfo}
+          onCancel={handleCancelExportJpgMode}
+          onExport={handleExportJpg}
+        />
+      )}
 
       {objectModalState?.mode === "create" && (
         <EditObjectModal

@@ -9,6 +9,8 @@ interface ToolsMenuProps {
   onSelectTool: (tool: EditTool) => void;
   onCreateGrid: () => void;
   onExport?: () => void;
+  onExportJpg?: () => void;
+  exportJpgActive?: boolean;
   className?: string;
 }
 
@@ -17,6 +19,8 @@ export function ToolsMenu({
   onSelectTool,
   onCreateGrid,
   onExport,
+  onExportJpg,
+  exportJpgActive = false,
   className = "",
 }: ToolsMenuProps) {
   const [expanded, setExpanded] = useState(false);
@@ -103,6 +107,20 @@ export function ToolsMenu({
               className="mt-1 min-h-10 w-full rounded-lg px-2 py-2 text-left text-xs text-gray-800 active:bg-gray-50 sm:text-sm"
             >
               Export Layout
+            </button>
+          )}
+
+          {onExportJpg && (
+            <button
+              type="button"
+              onClick={onExportJpg}
+              className={`mt-1 min-h-10 w-full rounded-lg px-2 py-2 text-left text-xs active:bg-gray-50 sm:text-sm ${
+                exportJpgActive
+                  ? "bg-[#f3f7f4] font-medium text-[#2f4034]"
+                  : "text-gray-800"
+              }`}
+            >
+              Export JPG
             </button>
           )}
         </div>

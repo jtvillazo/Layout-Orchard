@@ -44,6 +44,9 @@ interface CanvasProps {
   onElementDragEnd?: () => void;
   getLongPressDuration?: (contentPoint: PixelPoint | null) => number;
   screenOverlay?: React.ReactNode;
+  exportOverlay?: React.ReactNode;
+  layoutInteractionDisabled?: boolean;
+  hideResetButton?: boolean;
 }
 
 type ScreenPoint = { x: number; y: number };
@@ -64,6 +67,9 @@ export function Canvas({
   onElementDragEnd,
   getLongPressDuration,
   screenOverlay,
+  exportOverlay,
+  layoutInteractionDisabled = false,
+  hideResetButton = false,
 }: CanvasProps) {
   const [viewBox, setViewBox] = useState<ViewBox>(initialViewBox);
   const [viewRevision, setViewRevision] = useState(0);
@@ -105,6 +111,8 @@ export function Canvas({
   onElementDragEndRef.current = onElementDragEnd;
   const getLongPressDurationRef = useRef(getLongPressDuration);
   getLongPressDurationRef.current = getLongPressDuration;
+  const layoutInteractionDisabledRef = useRef(layoutInteractionDisabled);
+  layoutInteractionDisabledRef.current = layoutInteractionDisabled;
 
   const viewBoxRef = useRef(viewBox);
   viewBoxRef.current = viewBox;
@@ -242,6 +250,10 @@ export function Canvas({
   );
 
   const forwardClick = useCallback((clientX: number, clientY: number) => {
+    if (layoutInteractionDisabledRef.current) {
+      return;
+    }
+
     const { target, contentPoint } = getHitTargetAndContentPoint(clientX, clientY);
 
     onSurfaceClickRef.current?.(target, clientX, clientY, contentPoint);
@@ -266,8 +278,13 @@ export function Canvas({
     applyTwoFingerGesture,
     forwardClick,
     getHitTargetAndContentPoint,
-    getDragIntent: (target, clientX, clientY, contentPoint) =>
-      getDragIntentRef.current?.(target, clientX, clientY, contentPoint) ?? "pan",
+    getDragIntent: (target, clientX, clientY, contentPoint) => {
+      if (layoutInteractionDisabledRef.current) {
+        return "pan";
+      }
+
+      return getDragIntentRef.current?.(target, clientX, clientY, contentPoint) ?? "pan";
+    },
     onElementDrag: (contentPoint) => onElementDragRef.current?.(contentPoint),
     finishElementDrag: () => finishElementDragRef.current(),
   };
@@ -325,6 +342,10 @@ export function Canvas({
   };
 
   const fireLongPress = (clientX: number, clientY: number) => {
+    if (layoutInteractionDisabledRef.current) {
+      return;
+    }
+
     console.log("[LONG PRESS] TRIGGERED");
     const svg = svgRef.current;
     const contentGroup = contentGroupRef.current;
@@ -799,13 +820,41 @@ export function Canvas({
     return viewBoxRef.current.width / rect.width;
   }, []);
 
+  const screenClientToContent = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    const contentGroup = contentGroupRef.current;
+    if (!svg || !contentGroup) {
+      return null;
+    }
+
+    return screenClientToContentPoint(svg, contentGroup, clientX, clientY);
+  }, []);
+
+  const getContainerRect = useCallback(() => {
+    return containerRef.current?.getBoundingClientRect() ?? null;
+  }, []);
+
+  const getContentGroupElement = useCallback(() => {
+    return contentGroupRef.current;
+  }, []);
+
   const uiContextValue = useMemo(
     () => ({
       contentToContainer,
       viewRevision,
       getContentUiScale,
+      screenClientToContentPoint: screenClientToContent,
+      getContainerRect,
+      getContentGroupElement,
     }),
-    [contentToContainer, viewRevision, getContentUiScale]
+    [
+      contentToContainer,
+      viewRevision,
+      getContentUiScale,
+      screenClientToContent,
+      getContainerRect,
+      getContentGroupElement,
+    ]
   );
 
   return (
@@ -858,6 +907,9 @@ export function Canvas({
 
       {screenOverlay}
 
+      {exportOverlay}
+
+      {!hideResetButton && (
       <button
         type="button"
         onPointerDown={(e) => e.stopPropagation()}
@@ -882,6 +934,7 @@ export function Canvas({
       >
         Restablecer vista
       </button>
+      )}
     </div>
     </CanvasUiContext.Provider>
   );
