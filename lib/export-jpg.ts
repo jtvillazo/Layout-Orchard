@@ -8,16 +8,17 @@ const VINE_HIT_MARGIN = 10;
 const PANEL_MIN_WIDTH = 340;
 const PANEL_MAX_WIDTH = 520;
 const PANEL_WIDTH_RATIO = 0.32;
-const PANEL_PADDING = 36;
-const SECTION_GAP = 36;
-const SECTION_TITLE_SIZE = 24;
-const FIELD_LABEL_SIZE = 16;
-const FIELD_VALUE_SIZE = 22;
-const FIELD_BLOCK_GAP = 22;
-const LEGEND_ROW_HEIGHT = 40;
-const SWATCH_SIZE = 26;
-const SWATCH_TEXT_GAP = 14;
-const BODY_LINE_HEIGHT = 28;
+const PANEL_PADDING = 28;
+const SECTION_GAP = 24;
+/** Fixed export typography — never scaled with layout size. */
+const EXPORT_FONT_SIZE = 14;
+const FIELD_BLOCK_GAP = 18;
+const LEGEND_ROW_HEIGHT = 22;
+const SWATCH_SIZE = 16;
+const SWATCH_TEXT_GAP = 10;
+const BODY_LINE_HEIGHT = 18;
+const EXPORT_WHITE = "#FFFFFF";
+const FONT_FAMILY = "Arial, Helvetica, sans-serif";
 
 export function getVinesInContentRect(
   vines: Vine[],
@@ -187,7 +188,7 @@ function measureSidePanelContentHeight(
   let height = PANEL_PADDING;
 
   if (options.includeLayoutInfo) {
-    height += SECTION_TITLE_SIZE + 20;
+    height += EXPORT_FONT_SIZE + 16;
     const fields = [
       { label: "Project", value: options.projectName },
       { label: "Leader", value: options.projectLeader },
@@ -195,9 +196,9 @@ function measureSidePanelContentHeight(
       { label: "Variety", value: options.variety },
     ];
 
-    ctx.font = `600 ${FIELD_VALUE_SIZE}px Arial, Helvetica, sans-serif`;
+    ctx.font = `${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
     fields.forEach((field) => {
-      height += FIELD_LABEL_SIZE + 6;
+      height += EXPORT_FONT_SIZE + 4;
       const lines = wrapText(ctx, field.value, contentWidth);
       height += lines.length * FIELD_BLOCK_GAP;
     });
@@ -208,12 +209,12 @@ function measureSidePanelContentHeight(
   }
 
   if (options.includeLegend) {
-    height += SECTION_TITLE_SIZE + 20;
+    height += EXPORT_FONT_SIZE + 16;
 
     if (options.treatments.length === 0) {
       height += BODY_LINE_HEIGHT;
     } else {
-      ctx.font = `${FIELD_VALUE_SIZE}px Arial, Helvetica, sans-serif`;
+      ctx.font = `${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
       const textStart = PANEL_PADDING + SWATCH_SIZE + SWATCH_TEXT_GAP;
 
       options.treatments.forEach((treatment) => {
@@ -222,7 +223,10 @@ function measureSidePanelContentHeight(
           treatment.name,
           panelWidth - textStart - PANEL_PADDING
         );
-        height += Math.max(LEGEND_ROW_HEIGHT, lines.length * (FIELD_VALUE_SIZE + 8));
+        height += Math.max(
+          LEGEND_ROW_HEIGHT,
+          lines.length * (EXPORT_FONT_SIZE + 4)
+        );
       });
     }
   }
@@ -238,11 +242,11 @@ function drawSectionTitle(
   title: string
 ) {
   ctx.fillStyle = "#2f4034";
-  ctx.font = `700 ${SECTION_TITLE_SIZE}px Arial, Helvetica, sans-serif`;
+  ctx.font = `700 ${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
   ctx.textBaseline = "top";
   ctx.fillText(title.toUpperCase(), x, y);
 
-  const underlineY = y + SECTION_TITLE_SIZE + 8;
+  const underlineY = y + EXPORT_FONT_SIZE + 6;
   ctx.strokeStyle = "#d1d5db";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -262,13 +266,13 @@ function drawFieldBlock(
   value: string
 ): number {
   ctx.fillStyle = "#6b7280";
-  ctx.font = `600 ${FIELD_LABEL_SIZE}px Arial, Helvetica, sans-serif`;
+  ctx.font = `600 ${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
   ctx.textBaseline = "top";
   ctx.fillText(label, x, y);
 
-  let currentY = y + FIELD_LABEL_SIZE + 6;
+  let currentY = y + EXPORT_FONT_SIZE + 4;
   ctx.fillStyle = "#1f2a24";
-  ctx.font = `600 ${FIELD_VALUE_SIZE}px Arial, Helvetica, sans-serif`;
+  ctx.font = `${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
 
   wrapText(ctx, value, maxWidth).forEach((line) => {
     ctx.fillText(line, x, currentY);
@@ -285,7 +289,7 @@ function drawSidePanel(
   panelHeight: number,
   options: SidePanelContentOptions
 ) {
-  ctx.fillStyle = "#f7f8f6";
+  ctx.fillStyle = EXPORT_WHITE;
   ctx.fillRect(panelX, 0, panelWidth, panelHeight);
 
   ctx.strokeStyle = "#e5e7eb";
@@ -345,12 +349,12 @@ function drawSidePanel(
 
     if (options.treatments.length === 0) {
       ctx.fillStyle = "#6b7280";
-      ctx.font = `${FIELD_VALUE_SIZE}px Arial, Helvetica, sans-serif`;
+      ctx.font = `${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
       ctx.fillText("No treatments in selected area", contentX, y);
       return;
     }
 
-    ctx.font = `${FIELD_VALUE_SIZE}px Arial, Helvetica, sans-serif`;
+    ctx.font = `${EXPORT_FONT_SIZE}px ${FONT_FAMILY}`;
     const textX = contentX + SWATCH_SIZE + SWATCH_TEXT_GAP;
     const textMaxWidth =
       panelWidth - PANEL_PADDING * 2 - SWATCH_SIZE - SWATCH_TEXT_GAP;
@@ -365,10 +369,10 @@ function drawSidePanel(
 
       lines.forEach((line) => {
         ctx.fillText(line, textX, lineY);
-        lineY += FIELD_VALUE_SIZE + 8;
+        lineY += EXPORT_FONT_SIZE + 4;
       });
 
-      y += Math.max(LEGEND_ROW_HEIGHT, lines.length * (FIELD_VALUE_SIZE + 8));
+      y += Math.max(LEGEND_ROW_HEIGHT, lines.length * (EXPORT_FONT_SIZE + 4));
     });
   }
 }
@@ -412,6 +416,14 @@ export async function exportLayoutToJpeg(
   const layoutPixelHeight = Math.round(options.bounds.height * scale);
   svg.setAttribute("width", String(layoutPixelWidth));
   svg.setAttribute("height", String(layoutPixelHeight));
+
+  const whiteBackground = document.createElementNS(svgNamespace, "rect");
+  whiteBackground.setAttribute("x", String(options.bounds.x));
+  whiteBackground.setAttribute("y", String(options.bounds.y));
+  whiteBackground.setAttribute("width", String(options.bounds.width));
+  whiteBackground.setAttribute("height", String(options.bounds.height));
+  whiteBackground.setAttribute("fill", EXPORT_WHITE);
+  svg.appendChild(whiteBackground);
   svg.appendChild(clone);
 
   const svgString = new XMLSerializer().serializeToString(svg);
@@ -446,7 +458,7 @@ export async function exportLayoutToJpeg(
       throw new Error("Canvas is not available.");
     }
 
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = EXPORT_WHITE;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, layoutPixelWidth, layoutPixelHeight);
 
