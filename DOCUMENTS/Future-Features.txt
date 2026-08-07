@@ -2,6 +2,5 @@
 2. Edit layout data (Project Name, Leader Name, etc.)
 3.  Export JPG layout
 4. Export Excel file with labels
-5. Edit Layout Info
-6. Enable 2 colors in treatments
+5. Enable 2 colors in treatments
 7.

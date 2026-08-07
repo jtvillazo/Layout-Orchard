@@ -10,6 +10,7 @@ import {
 } from "@/lib/grid-geometry";
 import { useCanvasUi } from "@/components/layout-editor/canvas-ui-context";
 import { useCompactViewport } from "@/hooks/useCompactViewport";
+import { getTreatmentVineColors } from "@/lib/treatment-colors";
 import {
   getRowHandleContentMetrics,
   type RowHandleContentMetrics,
@@ -27,7 +28,6 @@ interface GridViewProps {
   onRowNumberHandleClick?: (rowNumber: number) => void;
 }
 
-const UNTREATED_COLOR = "#D1D5DB";
 const VINE_RADIUS = 8;
 const LINE_OVERHANG = BAY_HEIGHT * 0.1;
 
@@ -41,6 +41,121 @@ interface RowNumberHandleProps {
 }
 
 const ROW_LABEL_ROTATION = -45;
+
+interface VineShapeProps {
+  vineId: string;
+  x: number;
+  y: number;
+  gender: Vine["gender"];
+  primaryColor: string;
+  secondaryColor: string | null;
+  vineStyle: {
+    cursor: "pointer" | "default";
+    pointerEvents: "all" | "none";
+  };
+  onClick: (event: MouseEvent) => void;
+}
+
+function VineShape({
+  vineId,
+  x,
+  y,
+  gender,
+  primaryColor,
+  secondaryColor,
+  vineStyle,
+  onClick,
+}: VineShapeProps) {
+  const twoTone = secondaryColor !== null;
+
+  if (gender === "male") {
+    if (!twoTone) {
+      return (
+        <rect
+          data-vine-id={vineId}
+          x={x - VINE_RADIUS}
+          y={y - VINE_RADIUS}
+          width={VINE_RADIUS * 2}
+          height={VINE_RADIUS * 2}
+          fill={primaryColor}
+          stroke="#111827"
+          strokeWidth={1}
+          style={vineStyle}
+          onClick={onClick}
+        />
+      );
+    }
+
+    return (
+      <g data-vine-id={vineId} style={vineStyle} onClick={onClick}>
+        <rect
+          x={x - VINE_RADIUS}
+          y={y - VINE_RADIUS}
+          width={VINE_RADIUS * 2}
+          height={VINE_RADIUS}
+          fill={primaryColor}
+          stroke="none"
+        />
+        <rect
+          x={x - VINE_RADIUS}
+          y={y}
+          width={VINE_RADIUS * 2}
+          height={VINE_RADIUS}
+          fill={secondaryColor}
+          stroke="none"
+        />
+        <rect
+          x={x - VINE_RADIUS}
+          y={y - VINE_RADIUS}
+          width={VINE_RADIUS * 2}
+          height={VINE_RADIUS * 2}
+          fill="none"
+          stroke="#111827"
+          strokeWidth={1}
+        />
+      </g>
+    );
+  }
+
+  if (!twoTone) {
+    return (
+      <circle
+        data-vine-id={vineId}
+        cx={x}
+        cy={y}
+        r={VINE_RADIUS}
+        fill={primaryColor}
+        stroke="#111827"
+        strokeWidth={1}
+        style={vineStyle}
+        onClick={onClick}
+      />
+    );
+  }
+
+  return (
+    <g data-vine-id={vineId} style={vineStyle} onClick={onClick}>
+      <path
+        d={`M ${x - VINE_RADIUS} ${y} A ${VINE_RADIUS} ${VINE_RADIUS} 0 0 1 ${x + VINE_RADIUS} ${y} Z`}
+        fill={primaryColor}
+        stroke="none"
+      />
+      <path
+        d={`M ${x - VINE_RADIUS} ${y} A ${VINE_RADIUS} ${VINE_RADIUS} 0 0 0 ${x + VINE_RADIUS} ${y} Z`}
+        fill={secondaryColor}
+        stroke="none"
+      />
+      <circle
+        cx={x}
+        cy={y}
+        r={VINE_RADIUS}
+        fill="none"
+        stroke="#111827"
+        strokeWidth={1}
+      />
+    </g>
+  );
+}
 
 function RowNumberHandle({
   x,
@@ -199,7 +314,8 @@ export function GridView({
         );
 
         const treatment = vine.treatmentId ? treatmentById.get(vine.treatmentId) : null;
-        const color = treatment?.color ?? UNTREATED_COLOR;
+        const { primary: color, secondary: secondaryColor } =
+          getTreatmentVineColors(treatment);
 
         const vineStyle = {
           cursor: onVineClick ? "pointer" : "default",
@@ -222,38 +338,18 @@ export function GridView({
             ? "#16A34A"
             : "#111827";
 
-        const shape = vine.gender === "male" ? (
-          <rect
-            key={`${vine.id}-shape`}
-            data-vine-id={vine.id}
-            x={point.x - VINE_RADIUS}
-            y={point.y - VINE_RADIUS}
-            width={VINE_RADIUS * 2}
-            height={VINE_RADIUS * 2}
-            fill={color}
-            stroke="#111827"
-            strokeWidth={1}
-            style={vineStyle}
-            onClick={handleVineClick}
-          />
-        ) : (
-          <circle
-            key={`${vine.id}-shape`}
-            data-vine-id={vine.id}
-            cx={point.x}
-            cy={point.y}
-            r={VINE_RADIUS}
-            fill={color}
-            stroke="#111827"
-            strokeWidth={1}
-            style={vineStyle}
-            onClick={handleVineClick}
-          />
-        );
-
         return (
           <g key={vine.id}>
-            {shape}
+            <VineShape
+              vineId={vine.id}
+              x={point.x}
+              y={point.y}
+              gender={vine.gender}
+              primaryColor={color}
+              secondaryColor={secondaryColor}
+              vineStyle={vineStyle}
+              onClick={handleVineClick}
+            />
             {showLabel && (
               <text
                 x={point.x + 12}

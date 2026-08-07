@@ -446,6 +446,60 @@ export async function updateLayoutRows(
   });
 }
 
+export async function updateLayoutMetadata(
+  layoutId: UUID,
+  updates: {
+    project: Project;
+    orchard: Orchard;
+    blocks: Block[];
+  }
+): Promise<ProjectData | null> {
+  return runTransaction(ALL_STORES, "readwrite", async (transaction) => {
+    const layoutsStore = getStore(transaction, STORES.layouts);
+    const blocksStore = getStore(transaction, STORES.blocks);
+    const gridsStore = getStore(transaction, STORES.grids);
+    const layout = await getById<Layout>(layoutsStore, layoutId);
+
+    if (!layout) {
+      return null;
+    }
+
+    const grids = await getGridsForLayout(gridsStore, layoutId);
+    const gridBlockIds = new Set(grids.map((grid) => grid.blockId));
+    const updatedBlockIds = new Set(updates.blocks.map((block) => block.id));
+
+    const existingBlocks = await getAllByIndex<Block>(
+      blocksStore,
+      "orchardId",
+      layout.orchardId
+    );
+
+    for (const block of existingBlocks) {
+      if (updatedBlockIds.has(block.id)) {
+        continue;
+      }
+
+      if (gridBlockIds.has(block.id)) {
+        continue;
+      }
+
+      await deleteById(blocksStore, block.id);
+    }
+
+    await putAll(getStore(transaction, STORES.projects), [updates.project]);
+    await putAll(getStore(transaction, STORES.orchards), [updates.orchard]);
+    await putAll(blocksStore, updates.blocks);
+
+    const updatedLayout: Layout = {
+      ...layout,
+      blockIds: updates.blocks.map((block) => block.id),
+    };
+
+    await putAll(layoutsStore, [updatedLayout]);
+    return finalizeLayoutWrite(transaction, layoutId);
+  });
+}
+
 /**
  * Deletes a layout and all entities belonging to its ProjectData bundle.
  * Current model: 1 project + 1 orchard + 1 layout per record.

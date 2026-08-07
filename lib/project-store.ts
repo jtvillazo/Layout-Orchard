@@ -9,6 +9,7 @@ export {
   getProjectData,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
+  updateLayoutMetadata,
   updateLayoutRows,
   updateLayoutTreatments,
   updateLayoutVines,

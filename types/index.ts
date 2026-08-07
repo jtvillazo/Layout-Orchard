@@ -67,6 +67,8 @@ interface Treatment {
   name: string;
   labelName: string;
   color: string;
+  /** Optional second color; when set, assigned vines render 50/50. */
+  color2?: string;
   comment?: string;
 }
 

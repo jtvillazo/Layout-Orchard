@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { TreatmentColorSwatch } from "@/components/layout-editor/TreatmentColorSwatch";
 import type { Treatment, UUID } from "@/types";
 
 export interface ImportLayoutOption {
@@ -111,11 +112,7 @@ export function ImportTreatmentsModal({
                           onChange={() => toggleTreatment(treatment.id)}
                           className="h-4 w-4 rounded border-gray-300 text-[#2f4034] focus:ring-[#66806b]"
                         />
-                        <span
-                          className="inline-block h-3 w-3 shrink-0 rounded-full border border-black/10"
-                          style={{ backgroundColor: treatment.color }}
-                          aria-hidden="true"
-                        />
+                        <TreatmentColorSwatch treatment={treatment} />
                         <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
                           {treatment.name}
                         </span>

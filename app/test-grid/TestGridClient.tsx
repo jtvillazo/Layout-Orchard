@@ -10,6 +10,7 @@ import {
   ProjectData,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
+  updateLayoutMetadata,
   updateLayoutRows,
   updateLayoutTreatments,
   updateLayoutVines,
@@ -33,7 +34,12 @@ import { EditObjectModal, type MapObjectFormFields } from "@/components/layout-e
 import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModal";
 import { EditTextModal, type MapTextFormFields } from "@/components/layout-editor/EditTextModal";
 import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
+import {
+  EditLayoutModal,
+  formValuesToMetadataUpdate,
+} from "@/components/layout-editor/EditLayoutModal";
 import { GridView } from "@/components/layout-editor/GridView";
+import { LayoutInfoPanel } from "@/components/layout-editor/LayoutInfoPanel";
 import { MapObjectView } from "@/components/layout-editor/MapObjectView";
 import { MapTextView } from "@/components/layout-editor/MapTextView";
 import { ScreenContextPopup } from "@/components/layout-editor/ScreenContextPopup";
@@ -64,6 +70,7 @@ import {
   updateRowDisplayNumber,
 } from "@/lib/row-numbers";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
+import type { LayoutFormValues } from "@/components/layout/LayoutForm";
 import {
   cloneTreatmentsForLayout,
   countVinesByTreatmentId,
@@ -142,6 +149,8 @@ export function TestGridClient() {
     "idle" | "loading" | "ready" | "not-found"
   >("idle");
   const [importProjects, setImportProjects] = useState<ProjectData[]>([]);
+  const [layoutInfoMenuOpen, setLayoutInfoMenuOpen] = useState(false);
+  const [showEditLayout, setShowEditLayout] = useState(false);
 
   useEffect(() => {
     if (!layoutId) {
@@ -365,6 +374,27 @@ export function TestGridClient() {
         current ? { ...current, mapTexts: updatedTexts } : current
       );
     }
+  }
+
+  async function handleSaveLayoutMetadata(values: LayoutFormValues) {
+    if (!layoutId || !projectData) {
+      return;
+    }
+
+    const metadata = formValuesToMetadataUpdate(
+      projectData,
+      values,
+      createId
+    );
+
+    const saved = await updateLayoutMetadata(layoutId, metadata);
+    if (!saved) {
+      return;
+    }
+
+    setProjectData(saved);
+    setShowEditLayout(false);
+    setLayoutInfoMenuOpen(false);
   }
 
   function handleCreateObject(fields: MapObjectFormFields, position: PixelPoint) {
@@ -795,6 +825,7 @@ export function TestGridClient() {
     ? getLayoutTreatments(treatments, layoutId)
     : [];
   const layoutGridIds = new Set(grids.map((grid) => grid.id));
+  const protectedBlockIds = new Set(grids.map((grid) => grid.blockId));
   const layoutVines = vines.filter((vine) => layoutGridIds.has(vine.gridId));
   const vineCountByTreatmentId = countVinesByTreatmentId(layoutVines);
   const numberingModeActive = activeTool === "numbering";
@@ -984,29 +1015,20 @@ export function TestGridClient() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-50 px-2 pt-2 sm:px-3 sm:pt-3 md:p-0">
         <div className="pointer-events-none grid grid-cols-[6.75rem_7.4rem] items-start justify-between gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:justify-normal sm:gap-3 md:block">
           <div className="pointer-events-none flex w-[6.75rem] min-w-0 flex-col gap-1.5 sm:w-auto sm:max-w-xs sm:gap-3 md:absolute md:left-8 md:top-8 md:w-44 md:max-w-none md:gap-3 lg:left-10 lg:top-10">
-            <div className="pointer-events-auto rounded-lg bg-white p-1.5 shadow-md sm:rounded-xl sm:p-3 lg:p-4">
-              <dl className="space-y-1 sm:space-y-2 lg:space-y-3">
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] leading-snug sm:text-xs lg:block lg:text-sm">
-                  <dt className="font-medium text-gray-500 lg:mb-0">Leader</dt>
-                  <dd className="truncate font-medium text-gray-800 lg:mt-0">
-                    {projectData?.project.projectLeader}
-                  </dd>
-                </div>
-
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] leading-snug sm:text-xs lg:block lg:text-sm">
-                  <dt className="font-medium text-gray-500 lg:mb-0">Project</dt>
-                  <dd className="truncate font-semibold text-gray-800 lg:mt-0">
-                    {projectData?.project.name}
-                  </dd>
-                </div>
-
-                <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] leading-snug sm:text-xs lg:block lg:text-sm">
-                  <dt className="font-medium text-gray-500 lg:mb-0">Orchard</dt>
-                  <dd className="truncate font-medium text-gray-800 lg:mt-0">
-                    {projectData?.orchard.name}
-                  </dd>
-                </div>
-              </dl>
+            <div className="pointer-events-auto">
+              {projectData && (
+                <LayoutInfoPanel
+                  projectData={projectData}
+                  menuOpen={layoutInfoMenuOpen}
+                  onToggleMenu={() =>
+                    setLayoutInfoMenuOpen((current) => !current)
+                  }
+                  onEdit={() => {
+                    setLayoutInfoMenuOpen(false);
+                    setShowEditLayout(true);
+                  }}
+                />
+              )}
             </div>
 
             {layoutId && (
@@ -1292,6 +1314,15 @@ export function TestGridClient() {
           onCancel={() => setEditingVineId(null)}
           onSave={(updates) => handleSaveVine(editingVine.id, updates)}
           onAddTreatment={handleAddTreatment}
+        />
+      )}
+
+      {showEditLayout && projectData && (
+        <EditLayoutModal
+          projectData={projectData}
+          protectedBlockIds={protectedBlockIds}
+          onCancel={() => setShowEditLayout(false)}
+          onSave={handleSaveLayoutMetadata}
         />
       )}
 

@@ -26,6 +26,7 @@ export function TreatmentModal({
   const [name, setName] = useState(treatment?.name ?? "");
   const [labelName, setLabelName] = useState(treatment?.labelName ?? "");
   const [color, setColor] = useState(treatment?.color ?? "#22C55E");
+  const [color2, setColor2] = useState(treatment?.color2 ?? "");
   const [comment, setComment] = useState(treatment?.comment ?? "");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -41,6 +42,7 @@ export function TreatmentModal({
           name: trimmedName,
           labelName: trimmedLabel,
           color,
+          ...(color2.trim() ? { color2: color2.trim() } : {}),
           ...(comment.trim() ? { comment: comment.trim() } : {}),
         }
       : {
@@ -49,11 +51,16 @@ export function TreatmentModal({
           name: trimmedName,
           labelName: trimmedLabel,
           color,
+          ...(color2.trim() ? { color2: color2.trim() } : {}),
           ...(comment.trim() ? { comment: comment.trim() } : {}),
         };
 
     if (isEdit && !comment.trim()) {
       delete savedTreatment.comment;
+    }
+
+    if (isEdit && !color2.trim()) {
+      delete savedTreatment.color2;
     }
 
     onSave(savedTreatment);
@@ -102,7 +109,7 @@ export function TreatmentModal({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-gray-700">
-              Color
+              Color 1
             </span>
             <div className="flex items-center gap-3">
               <input
@@ -112,6 +119,32 @@ export function TreatmentModal({
                 className="h-11 w-14 cursor-pointer rounded-lg border border-gray-200 bg-white"
               />
               <span className="text-sm text-gray-500">{color}</span>
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">
+              Color 2
+            </span>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={color2 || "#3B82F6"}
+                onChange={(event) => setColor2(event.target.value)}
+                className="h-11 w-14 cursor-pointer rounded-lg border border-gray-200 bg-white"
+              />
+              <span className="text-sm text-gray-500">
+                {color2 || "Optional"}
+              </span>
+              {color2 && (
+                <button
+                  type="button"
+                  onClick={() => setColor2("")}
+                  className="text-sm font-medium text-gray-500 underline"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </label>
 

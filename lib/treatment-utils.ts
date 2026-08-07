@@ -31,6 +31,7 @@ export function cloneTreatmentForLayout(
     name: source.name,
     labelName: source.labelName,
     color: source.color,
+    ...(source.color2 ? { color2: source.color2 } : {}),
     ...(source.comment ? { comment: source.comment } : {}),
   };
 }

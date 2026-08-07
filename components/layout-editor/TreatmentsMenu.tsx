@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { TreatmentColorSwatch } from "@/components/layout-editor/TreatmentColorSwatch";
 import type { Treatment, UUID } from "@/types";
 
 interface TreatmentsMenuProps {
@@ -151,11 +152,7 @@ export function TreatmentsMenu({
                         isSelected ? "bg-[#f3f7f4]" : ""
                       }`}
                     >
-                      <span
-                        className="inline-block h-3 w-3 shrink-0 rounded-full border border-black/10"
-                        style={{ backgroundColor: treatment.color }}
-                        aria-hidden="true"
-                      />
+                      <TreatmentColorSwatch treatment={treatment} />
                       <span className="min-w-0 flex-1 truncate text-gray-800">
                         {treatment.name}
                       </span>
