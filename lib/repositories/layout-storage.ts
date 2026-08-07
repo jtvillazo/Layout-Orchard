@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/database";
 import { STORES } from "@/lib/db/schema";
 import type { ProjectData } from "@/lib/storage/project-data";
+import { remapBackupToLayout } from "@/lib/layout-backup";
 import type {
   Block,
   Grid,
@@ -497,6 +498,85 @@ export async function updateLayoutMetadata(
 
     await putAll(layoutsStore, [updatedLayout]);
     return finalizeLayoutWrite(transaction, layoutId);
+  });
+}
+
+export async function importLayoutBackup(
+  targetLayoutId: UUID,
+  backup: ProjectData
+): Promise<ProjectData | null> {
+  const imported = remapBackupToLayout(backup, targetLayoutId);
+
+  return runTransaction(ALL_STORES, "readwrite", async (transaction) => {
+    const layoutsStore = getStore(transaction, STORES.layouts);
+    const existingLayout = await getById<Layout>(layoutsStore, targetLayoutId);
+
+    if (!existingLayout) {
+      return null;
+    }
+
+    const gridsStore = getStore(transaction, STORES.grids);
+    const vinesStore = getStore(transaction, STORES.vines);
+    const rowsStore = getStore(transaction, STORES.rows);
+    const treatmentsStore = getStore(transaction, STORES.treatments);
+    const mapObjectsStore = getStore(transaction, STORES.mapObjects);
+    const mapTextsStore = getStore(transaction, STORES.mapTexts);
+    const blocksStore = getStore(transaction, STORES.blocks);
+    const projectsStore = getStore(transaction, STORES.projects);
+    const orchardsStore = getStore(transaction, STORES.orchards);
+
+    const existingGrids = await getGridsForLayout(gridsStore, targetLayoutId);
+
+    await Promise.all(
+      existingGrids.map(async (grid) => {
+        await deleteAllByIndex(vinesStore, "gridId", grid.id);
+        await deleteAllByIndex(rowsStore, "gridId", grid.id);
+        await deleteById(gridsStore, grid.id);
+      })
+    );
+
+    await deleteAllByIndex(treatmentsStore, "layoutId", targetLayoutId);
+    await deleteAllByIndex(mapObjectsStore, "layoutId", targetLayoutId);
+    await deleteAllByIndex(mapTextsStore, "layoutId", targetLayoutId);
+
+    await Promise.all(
+      existingLayout.blockIds.map((blockId) => deleteById(blocksStore, blockId))
+    );
+
+    await deleteById(projectsStore, existingLayout.projectId);
+    await deleteById(orchardsStore, existingLayout.orchardId);
+    await deleteById(layoutsStore, targetLayoutId);
+
+    await putAll(projectsStore, [imported.project]);
+    await putAll(orchardsStore, [imported.orchard]);
+    await putAll(blocksStore, imported.blocks);
+    await putAll(layoutsStore, [imported.layout]);
+
+    if (imported.grids.length > 0) {
+      await putAll(gridsStore, imported.grids);
+    }
+
+    if (imported.treatments && imported.treatments.length > 0) {
+      await putAll(treatmentsStore, imported.treatments);
+    }
+
+    if (imported.vines && imported.vines.length > 0) {
+      await putAll(vinesStore, imported.vines);
+    }
+
+    if (imported.mapObjects && imported.mapObjects.length > 0) {
+      await putAll(mapObjectsStore, imported.mapObjects);
+    }
+
+    if (imported.mapTexts && imported.mapTexts.length > 0) {
+      await putAll(mapTextsStore, imported.mapTexts);
+    }
+
+    if (imported.rows && imported.rows.length > 0) {
+      await putAll(rowsStore, imported.rows);
+    }
+
+    return assembleProjectDataFromLayout(transaction, imported.layout);
   });
 }
 

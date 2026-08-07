@@ -7,6 +7,7 @@ export {
   getAllProjects,
   getLayoutData,
   getProjectData,
+  importLayoutBackup,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
   updateLayoutMetadata,

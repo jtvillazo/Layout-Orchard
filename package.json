@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "test:offline": "node scripts/verify-offline.mjs",
+    "test:backup": "node scripts/check-layout-backup.mjs",
     "lint": "eslint"
   },
   "dependencies": {
