@@ -8,6 +8,7 @@ export {
   getLayoutData,
   getProjectData,
   importLayoutBackup,
+  restoreLayoutFromBackup,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
   updateLayoutMetadata,

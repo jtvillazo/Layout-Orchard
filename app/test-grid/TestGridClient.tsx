@@ -7,7 +7,6 @@ import {
   addGridToLayout,
   getAllProjects,
   getLayoutData,
-  importLayoutBackup,
   ProjectData,
   updateLayoutMapObjects,
   updateLayoutMapTexts,
@@ -35,7 +34,7 @@ import { EditObjectModal, type MapObjectFormFields } from "@/components/layout-e
 import { EditRowNumberModal } from "@/components/layout-editor/EditRowNumberModal";
 import { EditTextModal, type MapTextFormFields } from "@/components/layout-editor/EditTextModal";
 import { EditVineModal, type VineEditableFields } from "@/components/layout-editor/EditVineModal";
-import { ExportImportLayoutModal } from "@/components/layout-editor/ExportImportLayoutModal";
+import { ExportLayoutModal } from "@/components/layout-editor/ExportLayoutModal";
 import {
   EditLayoutModal,
   formValuesToMetadataUpdate,
@@ -72,7 +71,6 @@ import {
   updateRowDisplayNumber,
 } from "@/lib/row-numbers";
 import { getFirstAvailableSlot } from "@/lib/vine-slots";
-import type { LayoutBackupFile } from "@/lib/layout-backup";
 import type { LayoutFormValues } from "@/components/layout/LayoutForm";
 import {
   cloneTreatmentsForLayout,
@@ -154,7 +152,7 @@ export function TestGridClient() {
   const [importProjects, setImportProjects] = useState<ProjectData[]>([]);
   const [layoutInfoMenuOpen, setLayoutInfoMenuOpen] = useState(false);
   const [showEditLayout, setShowEditLayout] = useState(false);
-  const [showExportImport, setShowExportImport] = useState(false);
+  const [showExportLayout, setShowExportLayout] = useState(false);
 
   useEffect(() => {
     if (!layoutId) {
@@ -399,37 +397,6 @@ export function TestGridClient() {
     setProjectData(saved);
     setShowEditLayout(false);
     setLayoutInfoMenuOpen(false);
-  }
-
-  async function handleImportLayoutBackup(
-    backup: LayoutBackupFile
-  ): Promise<boolean> {
-    if (!layoutId) {
-      return false;
-    }
-
-    const saved = await importLayoutBackup(layoutId, backup.data);
-    if (!saved) {
-      return false;
-    }
-
-    const grids = saved.grids ?? [];
-    setProjectData({ ...saved, grids });
-    setTreatments(saved.treatments ?? []);
-    setVines(saved.vines ?? []);
-    setMapObjects(normalizeMapObjects(saved.mapObjects ?? []));
-    setMapTexts(normalizeMapTexts(saved.mapTexts ?? []));
-    setLayoutRows(ensureLayoutRows(grids, saved.rows ?? []));
-    setActiveTool("none");
-    setSelectedVineId(null);
-    setSelectedObjectId(null);
-    setSelectedTextId(null);
-    setSelectedTreatmentMenuId(null);
-    setTreatmentModalState(null);
-    setDeleteTreatmentWarning(null);
-    setShowImportTreatments(false);
-    setShowExportImport(false);
-    return true;
   }
 
   function handleCreateObject(fields: MapObjectFormFields, position: PixelPoint) {
@@ -1071,7 +1038,7 @@ export function TestGridClient() {
                 activeTool={activeTool}
                 onSelectTool={handleSelectTool}
                 onCreateGrid={() => setShowCreateGrid(true)}
-                onExportImport={() => setShowExportImport(true)}
+                onExport={() => setShowExportLayout(true)}
                 className="pointer-events-auto"
               />
             )}
@@ -1353,16 +1320,15 @@ export function TestGridClient() {
         />
       )}
 
-      {showExportImport && projectData && (
-        <ExportImportLayoutModal
+      {showExportLayout && projectData && (
+        <ExportLayoutModal
           projectData={projectData}
           treatments={treatments}
           vines={vines}
           mapObjects={mapObjects}
           mapTexts={mapTexts}
           rows={layoutRows}
-          onImport={handleImportLayoutBackup}
-          onCancel={() => setShowExportImport(false)}
+          onCancel={() => setShowExportLayout(false)}
         />
       )}
 

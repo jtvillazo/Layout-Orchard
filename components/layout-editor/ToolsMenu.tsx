@@ -8,7 +8,7 @@ interface ToolsMenuProps {
   activeTool: EditTool;
   onSelectTool: (tool: EditTool) => void;
   onCreateGrid: () => void;
-  onExportImport?: () => void;
+  onExport?: () => void;
   className?: string;
 }
 
@@ -16,7 +16,7 @@ export function ToolsMenu({
   activeTool,
   onSelectTool,
   onCreateGrid,
-  onExportImport,
+  onExport,
   className = "",
 }: ToolsMenuProps) {
   const [expanded, setExpanded] = useState(false);
@@ -96,13 +96,13 @@ export function ToolsMenu({
             Texts
           </button>
 
-          {onExportImport && (
+          {onExport && (
             <button
               type="button"
-              onClick={onExportImport}
+              onClick={onExport}
               className="mt-1 min-h-10 w-full rounded-lg px-2 py-2 text-left text-xs text-gray-800 active:bg-gray-50 sm:text-sm"
             >
-              Export/Import Layout
+              Export Layout
             </button>
           )}
         </div>

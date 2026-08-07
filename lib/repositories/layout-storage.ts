@@ -183,6 +183,79 @@ async function finalizeLayoutWrite(
   return assembleProjectDataFromLayout(transaction, updatedLayout);
 }
 
+async function writeProjectDataBundle(
+  transaction: IDBTransaction,
+  data: ProjectData
+): Promise<void> {
+  await putAll(getStore(transaction, STORES.projects), [data.project]);
+  await putAll(getStore(transaction, STORES.orchards), [data.orchard]);
+  await putAll(getStore(transaction, STORES.blocks), data.blocks);
+  await putAll(getStore(transaction, STORES.layouts), [data.layout]);
+
+  if (data.grids.length > 0) {
+    await putAll(getStore(transaction, STORES.grids), data.grids);
+  }
+
+  if (data.treatments && data.treatments.length > 0) {
+    await putAll(getStore(transaction, STORES.treatments), data.treatments);
+  }
+
+  if (data.vines && data.vines.length > 0) {
+    await putAll(getStore(transaction, STORES.vines), data.vines);
+  }
+
+  if (data.mapObjects && data.mapObjects.length > 0) {
+    await putAll(getStore(transaction, STORES.mapObjects), data.mapObjects);
+  }
+
+  if (data.mapTexts && data.mapTexts.length > 0) {
+    await putAll(getStore(transaction, STORES.mapTexts), data.mapTexts);
+  }
+
+  if (data.rows && data.rows.length > 0) {
+    await putAll(getStore(transaction, STORES.rows), data.rows);
+  }
+}
+
+async function deleteLayoutBundleInTransaction(
+  transaction: IDBTransaction,
+  layout: Layout
+): Promise<void> {
+  const layoutId = layout.id;
+  const gridsStore = getStore(transaction, STORES.grids);
+  const vinesStore = getStore(transaction, STORES.vines);
+  const rowsStore = getStore(transaction, STORES.rows);
+  const treatmentsStore = getStore(transaction, STORES.treatments);
+  const mapObjectsStore = getStore(transaction, STORES.mapObjects);
+  const mapTextsStore = getStore(transaction, STORES.mapTexts);
+  const blocksStore = getStore(transaction, STORES.blocks);
+  const projectsStore = getStore(transaction, STORES.projects);
+  const orchardsStore = getStore(transaction, STORES.orchards);
+  const layoutsStore = getStore(transaction, STORES.layouts);
+
+  const existingGrids = await getGridsForLayout(gridsStore, layoutId);
+
+  await Promise.all(
+    existingGrids.map(async (grid) => {
+      await deleteAllByIndex(vinesStore, "gridId", grid.id);
+      await deleteAllByIndex(rowsStore, "gridId", grid.id);
+      await deleteById(gridsStore, grid.id);
+    })
+  );
+
+  await deleteAllByIndex(treatmentsStore, "layoutId", layoutId);
+  await deleteAllByIndex(mapObjectsStore, "layoutId", layoutId);
+  await deleteAllByIndex(mapTextsStore, "layoutId", layoutId);
+
+  await Promise.all(
+    layout.blockIds.map((blockId) => deleteById(blocksStore, blockId))
+  );
+
+  await deleteById(projectsStore, layout.projectId);
+  await deleteById(orchardsStore, layout.orchardId);
+  await deleteById(layoutsStore, layoutId);
+}
+
 export async function createProjectData(data: ProjectData): Promise<ProjectData> {
   await runTransaction(
     [
@@ -199,34 +272,7 @@ export async function createProjectData(data: ProjectData): Promise<ProjectData>
     ],
     "readwrite",
     async (transaction) => {
-      await putAll(getStore(transaction, STORES.projects), [data.project]);
-      await putAll(getStore(transaction, STORES.orchards), [data.orchard]);
-      await putAll(getStore(transaction, STORES.blocks), data.blocks);
-      await putAll(getStore(transaction, STORES.layouts), [data.layout]);
-
-      if (data.grids.length > 0) {
-        await putAll(getStore(transaction, STORES.grids), data.grids);
-      }
-
-      if (data.treatments && data.treatments.length > 0) {
-        await putAll(getStore(transaction, STORES.treatments), data.treatments);
-      }
-
-      if (data.vines && data.vines.length > 0) {
-        await putAll(getStore(transaction, STORES.vines), data.vines);
-      }
-
-      if (data.mapObjects && data.mapObjects.length > 0) {
-        await putAll(getStore(transaction, STORES.mapObjects), data.mapObjects);
-      }
-
-      if (data.mapTexts && data.mapTexts.length > 0) {
-        await putAll(getStore(transaction, STORES.mapTexts), data.mapTexts);
-      }
-
-      if (data.rows && data.rows.length > 0) {
-        await putAll(getStore(transaction, STORES.rows), data.rows);
-      }
+      await writeProjectDataBundle(transaction, data);
     }
   );
 
@@ -515,68 +561,51 @@ export async function importLayoutBackup(
       return null;
     }
 
-    const gridsStore = getStore(transaction, STORES.grids);
-    const vinesStore = getStore(transaction, STORES.vines);
-    const rowsStore = getStore(transaction, STORES.rows);
-    const treatmentsStore = getStore(transaction, STORES.treatments);
-    const mapObjectsStore = getStore(transaction, STORES.mapObjects);
-    const mapTextsStore = getStore(transaction, STORES.mapTexts);
-    const blocksStore = getStore(transaction, STORES.blocks);
-    const projectsStore = getStore(transaction, STORES.projects);
-    const orchardsStore = getStore(transaction, STORES.orchards);
-
-    const existingGrids = await getGridsForLayout(gridsStore, targetLayoutId);
-
-    await Promise.all(
-      existingGrids.map(async (grid) => {
-        await deleteAllByIndex(vinesStore, "gridId", grid.id);
-        await deleteAllByIndex(rowsStore, "gridId", grid.id);
-        await deleteById(gridsStore, grid.id);
-      })
-    );
-
-    await deleteAllByIndex(treatmentsStore, "layoutId", targetLayoutId);
-    await deleteAllByIndex(mapObjectsStore, "layoutId", targetLayoutId);
-    await deleteAllByIndex(mapTextsStore, "layoutId", targetLayoutId);
-
-    await Promise.all(
-      existingLayout.blockIds.map((blockId) => deleteById(blocksStore, blockId))
-    );
-
-    await deleteById(projectsStore, existingLayout.projectId);
-    await deleteById(orchardsStore, existingLayout.orchardId);
-    await deleteById(layoutsStore, targetLayoutId);
-
-    await putAll(projectsStore, [imported.project]);
-    await putAll(orchardsStore, [imported.orchard]);
-    await putAll(blocksStore, imported.blocks);
-    await putAll(layoutsStore, [imported.layout]);
-
-    if (imported.grids.length > 0) {
-      await putAll(gridsStore, imported.grids);
-    }
-
-    if (imported.treatments && imported.treatments.length > 0) {
-      await putAll(treatmentsStore, imported.treatments);
-    }
-
-    if (imported.vines && imported.vines.length > 0) {
-      await putAll(vinesStore, imported.vines);
-    }
-
-    if (imported.mapObjects && imported.mapObjects.length > 0) {
-      await putAll(mapObjectsStore, imported.mapObjects);
-    }
-
-    if (imported.mapTexts && imported.mapTexts.length > 0) {
-      await putAll(mapTextsStore, imported.mapTexts);
-    }
-
-    if (imported.rows && imported.rows.length > 0) {
-      await putAll(rowsStore, imported.rows);
-    }
-
+    await deleteLayoutBundleInTransaction(transaction, existingLayout);
+    await writeProjectDataBundle(transaction, imported);
     return assembleProjectDataFromLayout(transaction, imported.layout);
+  });
+}
+
+/** Persist a complete backup as its own Layout (Create New Layout import flow). */
+export async function restoreLayoutFromBackup(
+  backup: ProjectData
+): Promise<ProjectData> {
+  const normalized: ProjectData = {
+    project: backup.project,
+    orchard: backup.orchard,
+    blocks: backup.blocks,
+    layout: backup.layout,
+    grids: backup.grids,
+    treatments: backup.treatments ?? [],
+    vines: backup.vines ?? [],
+    mapObjects: backup.mapObjects ?? [],
+    mapTexts: backup.mapTexts ?? [],
+    rows: backup.rows ?? [],
+  };
+
+  return runTransaction(ALL_STORES, "readwrite", async (transaction) => {
+    const layoutsStore = getStore(transaction, STORES.layouts);
+    const existingLayout = await getById<Layout>(
+      layoutsStore,
+      normalized.layout.id
+    );
+
+    if (existingLayout) {
+      await deleteLayoutBundleInTransaction(transaction, existingLayout);
+    }
+
+    await writeProjectDataBundle(transaction, normalized);
+    const restored = await assembleProjectDataFromLayout(
+      transaction,
+      normalized.layout
+    );
+
+    if (!restored) {
+      throw new Error("Failed to restore layout from backup.");
+    }
+
+    return restored;
   });
 }
 

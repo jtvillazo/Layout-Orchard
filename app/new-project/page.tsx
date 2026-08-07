@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 
+import { ImportLayoutJsonSection } from "@/components/layout/ImportLayoutJsonSection";
 import { LayoutForm, type LayoutFormValues } from "@/components/layout/LayoutForm";
 import { createId } from "@/lib/create-id";
-import { createProjectData } from "@/lib/project-store";
+import type { LayoutBackupFile } from "@/lib/layout-backup";
+import { createProjectData, restoreLayoutFromBackup } from "@/lib/project-store";
 import { Block, Layout, Orchard, Project } from "@/types";
 
 export default function NewProjectPage() {
@@ -67,6 +69,11 @@ export default function NewProjectPage() {
     router.push(`/test-grid?layoutId=${layoutId}`);
   }
 
+  async function handleImportBackup(backup: LayoutBackupFile) {
+    const saved = await restoreLayoutFromBackup(backup.data);
+    router.push(`/test-grid?layoutId=${saved.layout.id}`);
+  }
+
   return (
     <main className="min-h-screen bg-[#f5f6f2] text-[#1f2a24]">
       <div className="mx-auto w-full max-w-xl px-5 pb-10">
@@ -91,6 +98,8 @@ export default function NewProjectPage() {
           submitLabel="Create Layout"
           onSubmit={createProject}
         />
+
+        <ImportLayoutJsonSection onImport={handleImportBackup} />
       </div>
     </main>
   );
